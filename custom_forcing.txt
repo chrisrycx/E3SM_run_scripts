@@ -1,0 +1,31 @@
+For a -compset I1850ELM, the DATM forcing is QIAN.
+
+So, in the case dir, you will have the following
+
+
+ls -l CaseDocs
+total 168
+-rw-r--r--@ 1 gautam.bisht  staff   464B May 14 19:06 atm_modelio.nml
+-rw-r--r--@ 1 gautam.bisht  staff   464B May 14 19:06 cpl_modelio.nml
+-rw-r--r--@ 1 gautam.bisht  staff   1.3K May 14 19:06 datm_in
+-rw-r--r--@ 1 gautam.bisht  staff   1.1K May 14 19:06 datm.streams.txt.CLM_QIAN.Precip
+-rw-r--r--@ 1 gautam.bisht  staff   1.1K May 14 19:06 datm.streams.txt.CLM_QIAN.Solar
+-rw-r--r--@ 1 gautam.bisht  staff   1.2K May 14 19:06 datm.streams.txt.CLM_QIAN.TPQW
+-rw-r--r--@ 1 gautam.bisht  staff   1.1K May 14 19:06 datm.streams.txt.presaero.clim_1850
+-rw-r--r--@ 1 gautam.bisht  staff   747B May 14 19:06 datm.streams.txt.topo.observed
+-rw-r--r--@ 1 gautam.bisht  staff   7.3K May 14 19:06 drv_in
+-rw-r--r--@ 1 gautam.bisht  staff   471B May 14 19:06 esp_modelio.nml
+-rw-r--r--@ 1 gautam.bisht  staff   464B May 14 19:06 glc_modelio.nml
+-rw-r--r--@ 1 gautam.bisht  staff   464B May 14 19:06 iac_modelio.nml
+-rw-r--r--@ 1 gautam.bisht  staff   464B May 14 19:06 ice_modelio.nml
+-rw-r--r--@ 1 gautam.bisht  staff   3.4K May 14 19:06 lnd_in
+-rw-r--r--@ 1 gautam.bisht  staff   464B May 14 19:06 lnd_modelio.nml
+-rw-r--r--@ 1 gautam.bisht  staff    65B May 14 19:06 mosart_in
+-rw-r--r--@ 1 gautam.bisht  staff   464B May 14 19:06 ocn_modelio.nml
+-rw-r--r--@ 1 gautam.bisht  staff   464B May 14 19:06 rof_modelio.nml
+-rw-r--r--@ 1 gautam.bisht  staff   3.3K May 14 19:06 seq_maps.rc
+-rw-r--r--@ 1 gautam.bisht  staff   464B May 14 19:06 wav_modelio.nml
+
+You could copy all the CaseDocs/datm.stream* in your case dir and add a prefix user_datm.. Lastly, you modify the entries in the user_datm.* to point to your custom DATM forcing.
+
+Attached is a shell script from my colleague, Donghui Xu, that was running ELM simulation using custom DATM forcing corresponding to future CC scenario. You can ask the AI agent to create your custom single point DATM netcdf files by looking at the existing DATM forcing.
