@@ -1,93 +1,0 @@
-fsurdat = '/global/homes/e/enricoz/WUS_surface_data/surfdata_with_top_WUS_0125_c220106.nc'
-use_top_solar_rad           = .false.
-hist_empty_htapes           = .true.
-hist_fincl1                 = 'FSA','FSH','EFLX_LH_TOT','FSNO','SNOWDP','H2OSNO','SNORDSL', 'SNO_GS','SNO_DEN','SNO_SPH'
-hist_nhtfrq                 = 0
-hist_mfilt                  = 12
-
-snow_shape_defined          = 1
-use_snicar_ad               = .true.
-use_snicar_frc              = .true.
-is_dust_internal_mixing		= .false.
-is_BC_internal_mixing		= .true.
-snicar_atm_type				= 1
-
-use_dynamic_snow_shape      = .false.
-
-fsurdat = '/global/cfs/cdirs/m4986/data/enrico_data/WUS_surface_data/surfdata_with_top_WUS_0125_c220106.nc'
-use_top_solar_rad           = .false.
-hist_empty_htapes           = .true.
-hist_fincl1                 = 'FSA','FSH','EFLX_LH_TOT','FSNO','SNOWDP','H2OSNO','SNORDSL', 'SNO_GS','SNO_DEN','SNO_SPH'
-hist_nhtfrq                 = 0
-hist_mfilt                  = 12
-
-snow_shape_defined          = 1
-use_snicar_ad               = .true.
-use_snicar_frc              = .true.
-is_dust_internal_mixing		= .false.
-is_BC_internal_mixing		= .true.
-snicar_atm_type				= 1
-
-use_dynamic_snow_shape      = .false.
-
-fsurdat = '/global/cfs/cdirs/m4986/data/enrico_data/WUS_surface_data/surfdata_with_top_WUS_0125_c220106.nc'
-use_top_solar_rad           = .false.
-hist_empty_htapes           = .true.
-hist_fincl1                 = 'FSA','FSH','EFLX_LH_TOT','FSNO','SNOWDP','H2OSNO','SNORDSL', 'SNO_GS','SNO_DEN','SNO_SPH'
-hist_nhtfrq                 = 0
-hist_mfilt                  = 12
-
-snow_shape_defined          = 1
-use_snicar_ad               = .true.
-use_snicar_frc              = .true.
-is_dust_internal_mixing		= .false.
-is_BC_internal_mixing		= .true.
-snicar_atm_type				= 1
-
-use_dynamic_snow_shape      = .false.
-
-fsurdat = '/global/cfs/cdirs/m4986/data/enrico_data/WUS_surface_data/surfdata_with_top_WUS_0125_c220106.nc'
-use_top_solar_rad           = .false.
-hist_empty_htapes           = .true.
-hist_fincl1                 = 'FSA','FSH','EFLX_LH_TOT','FSNO','SNOWDP','H2OSNO','SNORDSL', 'SNO_GS','SNO_DEN','SNO_SPH'
-hist_nhtfrq                 = 0
-hist_mfilt                  = 12
-
-snow_shape_defined          = 1
-use_snicar_ad               = .true.
-use_snicar_frc              = .true.
-is_dust_internal_mixing		= .false.
-is_BC_internal_mixing		= .true.
-snicar_atm_type				= 1
-
-use_dynamic_snow_shape      = .false.
-
-fsurdat = '/global/cfs/cdirs/m4986/data/enrico_data/WUS_surface_data/surfdata_with_top_WUS_0125_c220106.nc'
-use_top_solar_rad           = .false.
-hist_empty_htapes           = .true.
-hist_fincl1                 = 'FSA','FSH','EFLX_LH_TOT','FSNO','SNOWDP','H2OSNO','SNORDSL', 'SNO_GS','SNO_DEN','SNO_SPH'
-hist_nhtfrq                 = 0
-hist_mfilt                  = 12
-
-snow_shape_defined          = 1
-use_snicar_ad               = .true.
-use_snicar_frc              = .true.
-is_dust_internal_mixing		= .false.
-is_BC_internal_mixing		= .true.
-snicar_atm_type				= 1
-
-use_dynamic_snow_shape      = .false.
-
-fsurdat = '/global/cfs/cdirs/m4986/data/enrico_data/WUS_surface_data/surfdata_with_top_WUS_0125_c220106.nc'
-use_top_solar_rad           = .false.
-hist_empty_htapes           = .true.
-hist_fincl1                 = 'FSA','FSH','EFLX_LH_TOT','FSNO','SNOWDP','H2OSNO','SNORDSL', 'SNO_GS','SNO_DEN','SNO_SPH'
-hist_nhtfrq                 = 0
-hist_mfilt                  = 12
-snow_shape_defined          = 1
-use_snicar_ad               = .true.
-use_snicar_frc              = .true.
-is_dust_internal_mixing		= .false.
-is_BC_internal_mixing		= .true.
-snicar_atm_type				= 1
-use_dynamic_snow_shape      = .false.

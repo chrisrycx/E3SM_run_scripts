@@ -221,3 +221,7 @@ __marimo__/
 
 # VS Code
 *.code-workspace
+
+# Machine-specific env files (keep templates)
+run_scripts/config/*.env
+!run_scripts/config/*.env.example
