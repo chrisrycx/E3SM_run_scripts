@@ -17,22 +17,19 @@ set -a; source "$ENV_FILE"; set +a
 : "${E3SM_ROOT:?must be set in $ENV_FILE}"
 : "${DATA_ROOT:?must be set in $ENV_FILE}"
 : "${OUTPUT_ROOT:?must be set in $ENV_FILE}"
-: "${MACH:?must be set in $ENV_FILE}"
-: "${COMPILER:?must be set in $ENV_FILE}"
-: "${PROJECT:?must be set in $ENV_FILE}"
 
-for mod in ${MODULES:-}; do
-    module load "$mod"
-done
+module load python/3.10
 
-# Experiment settings
-RES=ELM_USRDAT
-COMPSET=IELMBC
-CASE_NAME=TGUT_dynamic2
+export RES=ELM_USRDAT 
+export COMPSET=IELMBC
+export COMPILER=gnu
+export MACH=pm-cpu
 
-domainPath=$DATA_ROOT/Tony_Grove_UT/
-domainFile=domain_TG_UT_0125_c250814.nc
-surfdataFile=surfdata_TG_UT_0125_c250814.nc
+CASE_NAME=TGUT_first_test
+
+domainPath=$DATA_ROOT/tonygrovers/
+domainFile=domain_TG_UT_0125_c261028.nc
+surfdataFile=surfdata_TG_UT_0125_c261028.nc
 NL_TEMPLATE=$SCRIPT_DIR/../config/user_nl_elm_TG
 
 if [ ! -f "$NL_TEMPLATE" ]; then
@@ -51,7 +48,7 @@ fi
 cd "$E3SM_ROOT/cime/scripts"
 ./create_newcase --compset "$COMPSET" --res "$RES" --case "$CASE_NAME" \
     --script-root "$case_scripts_dir" --output-root "$OUTPUT_ROOT" \
-    --compiler "$COMPILER" --mach "$MACH" --project "$PROJECT"
+    --compiler "$COMPILER" --mach "$MACH" --project m4986
 cd "$case_scripts_dir"
 
 ./xmlchange LND_DOMAIN_FILE="$domainFile"

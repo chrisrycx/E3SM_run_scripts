@@ -1,7 +1,8 @@
 ! ELM namelist settings for the Tony Grove RS SNOTEL test (first_run_TG.sh)
 ! fsurdat is appended by the run script, since its path depends on the machine.
-hist_mfilt                  = 1
-hist_nhtfrq                 = -24
+hist_mfilt = 12, 30
+hist_nhtfrq = 0, -24
 use_snicar_ad               = .true.
 use_top_solar_rad           = .false.
-use_dynamic_snow_shape      = .true.
+snow_fsca_param = 0
+
