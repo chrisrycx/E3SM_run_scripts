@@ -95,7 +95,7 @@ hist_mfilt        = 12, 365
 hist_nhtfrq       = 0, -24
 use_snicar_ad     = .true.
 use_top_solar_rad = .false.
-snow_fsca_param   = 0
+snow_fsca_param   = 'SL12'
 EOF
 
 ./case.setup

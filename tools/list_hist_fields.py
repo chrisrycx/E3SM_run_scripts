@@ -12,8 +12,11 @@ import subprocess
 import sys
 
 repo, ref = sys.argv[1], sys.argv[2]
-files = subprocess.run(["git", "-C", repo, "ls-tree", "-r", "--name-only", ref, "components/elm/src"],
-                       capture_output=True, text=True, check=True).stdout.split()
+ls = subprocess.run(["git", "-C", repo, "ls-tree", "-r", "--name-only", ref, "components/elm/src"],
+                    capture_output=True, text=True)
+if ls.returncode != 0:
+    sys.exit(f"git ls-tree failed for repo '{repo}', ref '{ref}':\n{ls.stderr.strip()}")
+files = ls.stdout.split()
 out = {}
 for f in files:
     if not f.endswith(".F90"):
