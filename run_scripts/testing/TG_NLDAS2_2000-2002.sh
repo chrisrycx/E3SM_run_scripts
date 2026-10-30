@@ -59,7 +59,9 @@ cd "$E3SM_ROOT/cime/scripts"
 cd "$case_scripts_dir"
 
 # --- Processor layout ---------------------------------------------------------
-./xmlchange NTASKS=64
+# ELM splits work by gridcell and aborts if NTASKS > land gridcells.
+# TG domain is 12 x 8 = 96 cells, so 96 tasks gives 1 cell per task on one node.
+./xmlchange NTASKS=96
 
 # --- Site domain --------------------------------------------------------------
 ./xmlchange LND_DOMAIN_FILE="$domainFile",ATM_DOMAIN_FILE="$domainFile"
