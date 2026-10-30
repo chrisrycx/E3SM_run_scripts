@@ -7,8 +7,11 @@ when relevant, and cite the source file or doc you used.
 
 ## Repo layout
 
-- `run_scripts/testing/`: current, cleaned-up run scripts (e.g. `first_run_TG.sh`).
-  New scripts go here and follow its pattern.
+- `run_scripts/testing/`: current run scripts. Name them
+  `<region>_<forcing>_<startyear>-<endyear>.sh`, with an inclusive year range
+  (e.g. `TG_NLDAS2_2000-2002.sh`). The case name follows the same pattern, with an
+  optional `_<tag>` for variants. `TG_NLDAS2_2000-2002.sh` is the template to copy.
+  `first_run_TG.sh` is the original first test.
 - `run_scripts/config/`: `user_nl_elm_<SITE>` namelist templates, plus
   `machine.env.example`. Real `*.env` files are gitignored and set `E3SM_ROOT`,
   `DATA_ROOT`, `OUTPUT_ROOT`, `MACH`, `COMPILER`, `PROJECT`, `MODULES`.
@@ -24,8 +27,10 @@ when relevant, and cite the source file or doc you used.
 Run-script conventions (from `first_run_TG.sh`):
 - `set -euo pipefail`
 - machine paths come from a sourced `.env`
-- namelist settings live in a `config/user_nl_elm_*` template, and the script appends
-  only machine-dependent paths such as `fsurdat`
+- ELM namelist settings are written inline with a heredoc into `user_nl_elm`
+  (the `config/user_nl_elm_*` files are older templates)
+- settings are grouped as experiment → case creation → site data → processor layout
+  → run control → forcing → namelist
 - compset `IELMBC` + grid `ELM_USRDAT`, with custom domain files set via `xmlchange`
 - allocation is `m4986`
 
@@ -58,7 +63,7 @@ Branches that matter (the namelist options differ by branch):
 | Perlmutter machine/modules/batch | `cime_config/machines/config_machines.xml` (`MACH="pm-cpu"`), `config_batch.xml` |
 | Namelist → Fortran variable | `components/elm/src/main/controlMod.F90`, `elm_varctl.F90` |
 | Snow physics | `components/elm/src/biogeophys/` (`SnowSnicarMod.F90`, `SnowHydrologyMod.F90`, `SurfaceAlbedoMod.F90`, `CanopyHydrologyMod.F90`) |
-| History output fields | `grep -rn "hist_addfld" components/elm/src` |
+| History output fields (name, units, active/inactive by default) | `python3 tools/list_hist_fields.py ../E3SM origin/ez/fsca` (this repo); at runtime, the `ELM_hist_printflds` section of `lnd.log` |
 
 ### Documentation
 
