@@ -76,7 +76,8 @@ The case files go to `$OUTPUT_ROOT/<case>/`:
   and `case.submit`; also holds `CaseDocs/` and `user_nl_elm`
 - `bld/`: build output
 - `run/`: run directory, holding model output (`*.elm.h0.*`, `*.elm.h1.*`) and logs
-  (`lnd.log.*`, `cpl.log.*`)
+  (`lnd.log.*`, `cpl.log.*`) until they are archived to `$OUTPUT_ROOT/archive/<case>/`
+  (see [Checking whether a batch run succeeded](#checking-whether-a-batch-run-succeeded))
 
 **Warning:** a script deletes any existing case directory with the same name before
 creating the case. Change `TAG` or the year range to keep earlier results.
@@ -109,6 +110,91 @@ For interactive work on Perlmutter, e.g. testing or post-processing:
 ```
 salloc --nodes 1 --qos interactive --time 01:00:00 --constraint cpu --account m4986
 ```
+
+### When to rebuild the case
+
+A build compiles the Fortran source in `$E3SM_ROOT` into one executable. Anything the
+model reads at runtime (input files, the namelist, most `env_run.xml` settings) can be
+changed in an existing case and picked up on the next submit, without a rebuild:
+
+```
+cd $OUTPUT_ROOT/<case>/case_scripts
+vi user_nl_elm             # or ./xmlchange ...
+./preview_namelists        # check CaseDocs/lnd_in
+./case.submit              # or ./case.submit --no-batch on an interactive node
+```
+
+Rerunning a run script deletes the case and builds it from scratch, so for quick
+changes, edit the existing case instead.
+
+**No rebuild needed:**
+- **Input data files:** surface data (`fsurdat` in `user_nl_elm`) and domain files
+  (`LND_DOMAIN_FILE`/`LND_DOMAIN_PATH`, `ATM_DOMAIN_*`). You can replace a file, or point
+  to a new one. The new surface file must still match the domain grid (same cells
+  and lat/lon), and on `ez/fsca` it must contain `fsca_slope_mu` and `fsca_stddev_elev`.
+- **Namelist settings in `user_nl_elm`:** physics options (`snow_fsca_param`,
+  `use_snicar_ad`, ...) and history output (`hist_fincl*`, `hist_nhtfrq`, ...).
+- **`env_run.xml` / `env_batch.xml` settings:** run length and dates, restarts, forcing
+  (`DATM_MODE`, forcing years), domain files, wallclock and queue (see the table under
+  [Finding model configuration options](#finding-model-configuration-options-and-namelist-variables)).
+- **Source files that are not compiled:** the namelist definitions and defaults
+  (`components/elm/bld/namelist_files/*.xml`), the build-namelist Perl
+  (`components/elm/bld/`) and the CIME/DATM config files. They are read when the
+  namelist is generated, at `preview_namelists` and `case.submit`. A new namelist
+  variable still needs Fortran code to read it, and that code needs a rebuild.
+
+**Rebuild needed** (`./case.build`):
+- **Any Fortran change** (`components/elm/src/**/*.F90`), including files in
+  `case_scripts/SourceMods/src.elm/`. The rebuild is incremental: only changed files
+  and the files that `use` their modules are recompiled.
+- **Switching the `$E3SM_ROOT` branch.** Many files change, so expect close to a full
+  rebuild. Rerun `./preview_namelists`, because namelist options differ by branch.
+- **`env_build.xml` changes** (compiler, debug flags).
+- **Processor layout (`NTASKS`):** `./case.setup --reset`, then `./case.build`.
+- **After adding or removing source files**, if the incremental build gives link errors:
+  `./case.build --clean lnd`, then `./case.build`.
+
+**New case needed:** compset, grid or machine (`env_case.xml`).
+
+`case.submit` only checks that a build exists. It does not check whether the source
+changed since that build, so after editing Fortran, run `./case.build` before you
+submit, or the old executable runs.
+
+### Checking whether a batch run succeeded
+
+`case.submit` submits two Slurm jobs: `run.<case>` (the model) and
+`st_archive.<case>` (short-term archiving). The archiving job starts only if the
+run succeeds.
+
+```
+squeue -u $USER                          # still queued (PD) or running (R)?
+sacct -X --starttime today               # finished jobs: COMPLETED, FAILED or TIMEOUT
+```
+
+When the jobs have finished, check in the case directory:
+
+```
+cd $OUTPUT_ROOT/<case>/case_scripts
+tail -5 CaseStatus                       # last line: "case.run success" or "case.run error"
+less run.<case>.<jobid>                  # Slurm output of the run job
+```
+
+`CaseStatus` is the quickest check. On an error, it names the log to read. In the
+run directory (`./xmlquery --value RUNDIR`), look at:
+- `e3sm.log.*`: crash messages and tracebacks
+- `lnd.log.*`: ELM's own errors (search for `ENDRUN` or `ERROR`)
+- `cpl.log.*`: ends with `SUCCESSFUL TERMINATION` on a clean finish
+
+CIME gzips the logs after a successful run, so use `zgrep`/`zless` on them. If the
+job hit `TIMEOUT`, increase `JOB_WALLCLOCK_TIME` and resubmit.
+
+Short-term archiving (`DOUT_S=TRUE`, the default) moves history files and logs to
+`$OUTPUT_ROOT/archive/<case>/` (`lnd/hist/`, `logs/`) after a successful run. Files
+missing from `run/` usually mean the run worked. The test script sets
+`DOUT_S=FALSE`, so its files stay in `run/`.
+
+To get an email when the job ends:
+`./case.submit --mail-user <address> --mail-type end,fail`.
 
 ## Finding model configuration options and namelist variables
 
