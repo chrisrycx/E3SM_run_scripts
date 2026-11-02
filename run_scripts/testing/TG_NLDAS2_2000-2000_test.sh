@@ -61,7 +61,7 @@ PROJECT=${PROJECT:-m4986}
 # --- Site input data ----------------------------------------------------------
 domainPath=$DATA_ROOT/tonygrovers/
 domainFile=domain_TG_UT_0125_c261028.nc
-surfdataFile=surfdata_WUS_0125_c261028_merged.nc
+surfdataFile=surfdata_TG_UT_0125_c261028_merged.nc
 
 # --- Create case --------------------------------------------------------------
 case_dir=$OUTPUT_ROOT/$CASE_NAME
