@@ -44,7 +44,7 @@ REGION=TG
 FORCING=NLDAS2
 YEAR_START=2000
 YEAR_END=2000   # inclusive; forcing years available to DATM
-TAG="test"
+TAG="quicktest"
 STOP_DAYS=5     # run length in days
 
 CASE_NAME="${REGION}_${FORCING}_${YEAR_START}-${YEAR_END}${TAG:+_$TAG}"
@@ -59,7 +59,7 @@ PROJECT=${PROJECT:-m4986}
 # --- Site input data ----------------------------------------------------------
 domainPath=$DATA_ROOT/tonygrovers/
 domainFile=domain_TG_UT_0125_c261028.nc
-surfdataFile=surfdata_TG_UT_0125_c261028.nc
+surfdataFile=surfdata_WUS_0125_c260114_merged.nc
 
 # --- Create case --------------------------------------------------------------
 case_dir=$OUTPUT_ROOT/$CASE_NAME
