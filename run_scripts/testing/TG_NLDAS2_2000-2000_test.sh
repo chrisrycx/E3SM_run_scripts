@@ -13,11 +13,13 @@
 #      If you run it on a login node, it builds the case and stops, and you can submit later.
 #   3. Iterate in the same allocation without rebuilding. Changes to user_nl_elm,
 #      STOP_N or the history settings don't need a rebuild:
+#        module load python/3.10   # needed in the salloc shell, or srun's args break
 #        cd $OUTPUT_ROOT/TG_NLDAS2_2000-2000_test/case_scripts
 #        vi user_nl_elm && ./preview_namelists
 #        ./case.submit --no-batch
 #      NTASKS, compset or source code changes need ./case.build first.
-#   Logs:   $OUTPUT_ROOT/TG_NLDAS2_2000-2000_test/run/{lnd,cpl,e3sm}.log.*
+#   Check:  tail case_scripts/CaseStatus   ("case.run success" or "case.run error")
+#   Logs:   $OUTPUT_ROOT/TG_NLDAS2_2000-2000_test/run/{lnd,cpl,e3sm}.log.*  (gzipped on success)
 #   Output: $OUTPUT_ROOT/TG_NLDAS2_2000-2000_test/run/*.elm.h{0,1}.*.nc
 #
 # Without an allocation, plain ./case.submit sends the job to the debug queue (30 min max).
@@ -91,6 +93,9 @@ cd "$case_scripts_dir"
 ./xmlchange RUN_STARTDATE="${YEAR_START}-01-01",STOP_OPTION=ndays,STOP_N=$STOP_DAYS
 ./xmlchange REST_OPTION=ndays,REST_N=$STOP_DAYS
 ./xmlchange JOB_QUEUE=debug,JOB_WALLCLOCK_TIME="00:30:00"
+# No short-term archiving: logs and history files stay in run/ instead of moving
+# to $OUTPUT_ROOT/archive/$CASE_NAME after the run
+./xmlchange DOUT_S=FALSE
 
 # --- Forcing: model year YEAR_START uses forcing year YEAR_START --------------
 # NLDAS2: hourly, 0.125 deg, CONUS only (25-53N, 235-293E), years 1980-2018
@@ -132,6 +137,7 @@ else
     echo "Case built: $case_scripts_dir"
     echo "To run interactively:"
     echo "  salloc --nodes 1 --qos interactive --time 01:00:00 --constraint cpu --account $PROJECT"
+    echo "  Load python module > 3.8 "
     echo "  cd $case_scripts_dir && ./case.submit --no-batch"
     echo "Or submit to the debug queue: cd $case_scripts_dir && ./case.submit"
 fi
