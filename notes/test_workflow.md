@@ -102,7 +102,137 @@ The `.o` and `.mod` files are gitignored by E3SM's `.gitignore`, but the executa
 
 ## 2. Short ELM run
 
-TODO
+A 5-day run at Tony Grove with `run_scripts/testing/TG_NLDAS2_5d_2000.sh` checks that
+the code builds and runs in the full model. To check that a change *didn't* alter the
+model's answers, run a **regression test**: run the same case from two commits and
+compare the output bit for bit.
+
+### The idea
+
+```
+reference code (commit you trust)  →  run case "baseline"  →  output A
+your modified code                 →  run case "new"       →  output B
+                                       cprnc A B  →  identical?
+```
+
+Identical output is what you want for a refactor, or for a new option that's switched
+off. If you switch a new scheme on, the answers *should* differ. Judging that difference
+is tier 3, not a regression test.
+
+### Choosing the reference commit
+
+| What you want to show | Reference |
+|---|---|
+| "This edit changed nothing" (the usual case) | your last commit, before you start editing |
+| "My refactor kept the old results" | the commit before the refactor, e.g. `edcbdcd34c` before `fe85f116b9` |
+| "My branch matches upstream when the option is off" | `master` (only if the case doesn't set options `master` lacks, like `snow_fsca_param`) |
+
+A commit hash is already a permanent name, so a git tag isn't needed. For a
+reference you'll use often, a tag can help: `git tag fsca-pre-refactor edcbdcd34c`.
+Tags are local to each clone, so create it on Perlmutter, where you build.
+
+### Script options
+
+```bash
+[TAG=<tag>] [FSCA=<value>] ./TG_NLDAS2_5d_2000.sh [path/to/machine.env]
+```
+- `TAG`: case-name suffix, default `quicktest`. The case is
+  `$OUTPUT_ROOT/TG_NLDAS2_5d_2000_<TAG>`. An existing case with the same name is
+  deleted first, so use a different tag for each case you want to keep.
+- `FSCA`: the `snow_fsca_param` value, default `SL12`. Give it without quotes; the script
+  quotes strings and leaves integers as they are.
+
+All other settings must be identical between the two cases: compiler, `NTASKS`,
+dates, forcing and history fields. The script keeps them fixed.
+
+The namelist can differ between commits. For the SL12 refactor:
+
+| Commit | `snow_fsca_param` | Old Swenson & Lawrence (2012) scheme |
+|---|---|---|
+| `edcbdcd34c` (before) | integer: `0` SL12, `1` NY07, `2` Helbig21 | `FSCA=0` |
+| `fe85f116b9` (after) | string: `SL12`, `SL12_legacy`, `NY07`, `Helbig21`, `CZ26` | `FSCA=SL12_legacy` |
+
+Use `SL12_legacy`, not `SL12`, on the new code. `SL12` removes the fSCA drop on first
+melt after snowfall on purpose, so it isn't expected to match.
+
+### Steps (on Perlmutter)
+
+1. **Get a compute node:**
+   ```bash
+   salloc --nodes 1 --qos interactive --time 01:00:00 --constraint cpu --account m4986
+   ```
+2. **Check out the reference commit, with a clean tree:**
+   ```bash
+   cd $E3SM_ROOT
+   git status --short                 # should print nothing
+   git checkout edcbdcd34c            # "detached HEAD" warning is expected
+   git submodule update --init --recursive
+   ```
+3. **Build and run the baseline case:**
+   ```bash
+   cd ~/.../E3SM_run_scripts/run_scripts/testing
+   TAG=baseline FSCA=0 ./TG_NLDAS2_5d_2000.sh
+   ```
+4. **Check out the new commit, then build and run the new case:**
+   ```bash
+   cd $E3SM_ROOT && git checkout fe85f116b9 && git submodule update --init --recursive
+   cd -
+   TAG=new FSCA=SL12_legacy ./TG_NLDAS2_5d_2000.sh
+   ```
+   Don't run `./case.build` in the baseline case after this. It would recompile from
+   the new code.
+5. **Check that both runs finished:** `tail case_scripts/CaseStatus` in each case should
+   show `case.run success`.
+6. **Compare the output with cprnc:**
+   ```bash
+   CPRNC=/global/cfs/cdirs/e3sm/tools/cprnc/cprnc
+   B=$OUTPUT_ROOT/TG_NLDAS2_5d_2000_baseline/run
+   N=$OUTPUT_ROOT/TG_NLDAS2_5d_2000_new/run
+   $CPRNC $B/*.elm.r.*.nc  $N/*.elm.r.*.nc  | tail -20    # restart: full model state
+   $CPRNC $B/*.elm.h1.*.nc $N/*.elm.h1.*.nc | tail -20    # hourly history
+   ```
+7. **Return to your branch:**
+   ```bash
+   cd $E3SM_ROOT && git checkout fsca && git submodule update --init --recursive
+   ```
+
+### Reading the result
+
+- The summary at the end of the cprnc output says whether the files are identical. If
+  they differ, it lists the fields that differ and the largest difference. Those
+  fields show where to start looking.
+- **Compare the restart file (`*.elm.r.*.nc`) first.** The history files hold only the
+  fields in `hist_fincl` (18 here), but the restart file holds the whole model state:
+  every snow layer, temperature and water store. Any difference anywhere shows up
+  there.
+- Compare matching files only (`r` with `r`, `h1` with `h1`). Ignore the logs, since
+  they contain timestamps and timings.
+
+### Which commit built a case?
+
+The script writes `case_scripts/E3SM_COMMIT.txt` just before it builds. The file holds
+the commit, branch, date, `TAG`, `FSCA`, `git status` and `git submodule status`.
+- If `E3SM_ROOT` has uncommitted edits to tracked files, the commit is recorded as
+  `<hash>-dirty` and the script warns. Don't use a dirty case as a baseline.
+- In `git submodule status`, a `+` before a hash means that submodule doesn't match the
+  commit.
+- **One case = one commit.** The record goes stale if you check out another commit and
+  run `./case.build` in the same case by hand. For a new commit, make a new case.
+
+### Later: CIME's `create_test`
+
+CIME's `create_test` automates the same comparison and adds a restart-exactness check.
+An `ERS` test runs 5 days straight through, then again with a restart partway, and
+checks that both give identical results. That catches variables missing from the restart
+file.
+- `-g` saves a run's output as a baseline, and `-c` compares a new run against it.
+  Use your own `--baseline-root` (e.g. `$PSCRATCH/e3sm_baselines`). The default
+  `/global/cfs/cdirs/e3sm/baselines` belongs to E3SM's nightly testing.
+- The TG domain, surface data and forcing would go in a *testmod* under
+  `components/elm/cime_config/testdefs/testmods_dirs/elm/`, a directory of
+  `user_nl_elm` and `shell_commands`. See `extrasnowlayers/` or `koch_snowflake/` for
+  examples.
+- Not set up yet. Check the exact flags with `./create_test --help` on Perlmutter.
 
 ## 3. Namelist sweep
 

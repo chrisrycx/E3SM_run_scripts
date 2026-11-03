@@ -11,6 +11,8 @@ when relevant, and cite the source file or doc you used.
   `<region>_<forcing>_<startyear>-<endyear>.sh`, with an inclusive year range
   (e.g. `TG_NLDAS2_2000-2002.sh`). The case name follows the same pattern, with an
   optional `_<tag>` for variants. `TG_NLDAS2_2000-2002.sh` is the template to copy.
+  Short test runs are named `<region>_<forcing>_<N>d_<startyear>.sh` (e.g.
+  `TG_NLDAS2_5d_2000.sh`, a 5-day run whose case name is `TG_NLDAS2_5d_2000_<TAG>`).
   `first_run_TG.sh` is the original first test.
 - `run_scripts/config/`: `user_nl_elm_<SITE>` namelist templates, plus
   `machine.env.example`. Real `*.env` files are gitignored and set `E3SM_ROOT`,
