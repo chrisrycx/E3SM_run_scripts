@@ -243,4 +243,223 @@ file.
 
 ## 3. Namelist sweep
 
-TODO
+A sweep runs one snow season many times, changing one namelist setting at a time, e.g.
+every `snow_fsca_param` scheme. At Tony Grove, the season run (1 Oct to 1 Jul, 273
+days) takes about 20 min to build and about 10 min to run.
+
+### The idea: build once, clone many
+
+The model executable doesn't depend on `user_nl_elm`. The namelist is read when the
+model starts. So cases that differ only in namelist settings can share one executable:
+
+```
+TG_NLDAS2_WY20XX.sh  →  base case (full build, ~20 min)  →  bld/e3sm.exe
+                              │
+clone_variant.sh  ─────────── ├─ clone _NY07      (no build, own user_nl_elm, own run/)
+                              ├─ clone _Helbig21
+                              └─ clone _CZ26
+```
+
+`sweep_fsca.sh` runs both steps: it builds the base case if needed, then clones each
+variant.
+
+`clone_variant.sh` uses CIME's `create_clone --keepexe` (see `CIME/case/case_clone.py`
+in the `cime` submodule). `--keepexe` points the clone's `EXEROOT` at the base case's
+`bld/` directory and sets `BUILD_COMPLETE=TRUE`, so `case.build` is skipped.
+
+### Scripts
+
+There are three scripts in `run_scripts/testing/`, one per job:
+
+| Script | Job | Changes when |
+|---|---|---|
+| `TG_NLDAS2_WY20XX.sh` | create and build one case (the base) | the site, forcing, season or history output changes |
+| `clone_variant.sh` | clone a built case, change its namelist, run it | rarely (it's generic) |
+| `sweep_<name>.sh`, e.g. `sweep_fsca.sh` | list one experiment's variants; build the base if needed, then clone each variant | you add or change a variant |
+
+Why three scripts instead of one script that builds and then runs every variant:
+- **The base case is built only when needed.** `TG_NLDAS2_WY20XX.sh` always deletes
+  and rebuilds its case. A combined script would rebuild (20 min) every time you added
+  a variant, and the rebuild would delete the executable the existing clones use. The
+  sweep script calls it only when the base case has no successful build.
+- **Each script changes for one reason.** The base case changes with the E3SM commit or
+  the run setup, and a sweep list changes with each experiment. A new experiment
+  (snow shape, SNICAR settings, ...) is a new `sweep_<name>.sh` file. The tested build
+  script doesn't change.
+- **Each sweep file records the experiment.** It's in git, so the variant list and its
+  settings show what was run.
+- **Reruns pick up where they left off.** Adding a variant means adding a line and
+  rerunning: finished variants are skipped and only the new one runs. A failed variant
+  doesn't stop the others.
+- **Each piece also works on its own.** `clone_variant.sh` is still handy for a single
+  one-off variant, and `TG_NLDAS2_WY20XX.sh` for a single run.
+
+**Base case:**
+```bash
+[WY=<year>] [TAG=<tag>] [FSCA=<value>] [FINIDAT=<file>] [EXTRA_NML=<lines>] ./TG_NLDAS2_WY20XX.sh
+```
+- `WY`: water year, default 2012 (Oct 2011 - Jun 2012). NLDAS2 allows 1981-2018.
+- `TAG`: default `base`. The case is `$OUTPUT_ROOT/TG_NLDAS2_WY<WY>_<TAG>`.
+- `FINIDAT`: initial conditions from a restart file. Unset = cold start.
+- `EXTRA_NML`: extra `user_nl_elm` lines, appended as-is.
+
+**Variants:**
+```bash
+TAG=<tag> [FSCA=<value>] [EXTRA_NML=<lines>] [BASE=<case>] [NOSUBMIT=1] ./clone_variant.sh
+```
+- `BASE`: the built case to clone, default `TG_NLDAS2_WY2012_base`.
+- The clone is named `<BASE>_<TAG>`, e.g. `TG_NLDAS2_WY2012_base_NY07`, so the name
+  shows which build it used. An existing case with that name is deleted first.
+- `FSCA` replaces the base case's `snow_fsca_param` line. Any variable set in
+  `EXTRA_NML` replaces that variable's line from the base case, so nothing is set twice.
+- Inside `salloc`, each variant runs right away with `case.submit --no-batch`, one after
+  another (about 5 per 1-hour allocation). On a login node, each is submitted as a
+  batch job (debug queue), so a loop queues all of them at once. `NOSUBMIT=1` only
+  creates the case.
+
+**Sweep:**
+```bash
+[WY=<year>] [BASE_TAG=<tag>] [RERUN=<tags>|all] ./sweep_fsca.sh
+```
+- The variants are listed in the script, one `variant <TAG> <FSCA> [<EXTRA_NML>]` line
+  each. `FSCA ""` keeps the base value. Example:
+  `variant CZ26_spheroid CZ26 "snow_shape = 'spheroid'"`.
+- The base case is `TG_NLDAS2_WY<WY>_<BASE_TAG>`, run with `BASE_FSCA=SL12`. It is
+  the SL12 run of the sweep, so SL12 isn't listed as a variant.
+- The variants are `TG_NLDAS2_WY<WY>_<BASE_TAG>_<TAG>`.
+- What it does with each piece on a rerun:
+
+  | State | Action |
+  |---|---|
+  | Base case has no successful build | build it (`TG_NLDAS2_WY20XX.sh`) |
+  | Base case built | keep it; warn if `E3SM_ROOT` is now at another commit |
+  | Variant finished with the same settings | skip |
+  | Variant finished, but its line in the script changed | redo |
+  | Variant queued or running | skip, so a batch job isn't deleted under it |
+  | Variant failed or never ran | redo |
+  | Variant named in `RERUN` (or `RERUN=all`) | redo, whatever its state |
+
+  The run state comes from the last `case.run` line in the clone's `CaseStatus`. The
+  settings come from `sweep_variant.txt`, which the sweep writes into each clone.
+- A run killed by the end of an allocation or a wall-clock limit stays marked
+  `running`. If its job isn't in `squeue`, rerun it with `RERUN=<tag>`.
+- It ends with a summary (finished, run or submitted, queued or running, failed) and
+  exits nonzero if any variant failed.
+- A new experiment: copy `sweep_fsca.sh` to `sweep_<name>.sh` and change the `variant`
+  lines (and `BASE_FSCA` if needed).
+
+### Steps (on Perlmutter)
+
+1. **Check the source is clean:**
+   ```bash
+   cd $E3SM_ROOT && git status --short    # should print nothing
+   ```
+2. **Run the sweep.** On a login node, it builds the base case (about 20 min), then
+   submits each variant as a batch job:
+   ```bash
+   cd ~/.../E3SM_run_scripts/run_scripts/testing
+   ./sweep_fsca.sh
+   ```
+   Inside `salloc`, the base case and the variants run one after another instead
+   (20 min build + 10 min per run, so a 1-hour allocation won't fit them all). Run
+   the script again in a new allocation to finish the rest.
+3. **Check a clone** (first time): in `$OUTPUT_ROOT/clones/<case>/`,
+   `./xmlquery EXEROOT,RUNDIR,BUILD_COMPLETE` should show the base case's `bld/`, the
+   clone's own `run/` and `TRUE`. `CaseDocs/lnd_in` should show the changed setting.
+4. **Check the runs finished:** run `./sweep_fsca.sh` again. Its summary lists what's
+   finished, and it reruns any variant that failed. Or look at
+   `tail $OUTPUT_ROOT/clones/<case>/CaseStatus`.
+
+For a one-off variant outside a sweep, use `clone_variant.sh` directly, e.g.
+`TAG=spheroid EXTRA_NML="snow_shape = 'spheroid'" ./clone_variant.sh`.
+
+### Where things are
+
+| | Base case | Clone |
+|---|---|---|
+| Case scripts | `$OUTPUT_ROOT/<case>/case_scripts/` | `$OUTPUT_ROOT/clones/<case>/` |
+| Run dir (output, logs) | `$OUTPUT_ROOT/<case>/run/` | `$OUTPUT_ROOT/<case>/run/` |
+| Executable | `$OUTPUT_ROOT/<case>/bld/` | the base case's `bld/` |
+
+The clones' case scripts can't use the `<case>/case_scripts` layout, because
+`create_clone` takes the case name from the last part of the directory path. Run
+directories are in the same place for both, so analysis code finds output the same way.
+
+Each clone's `E3SM_COMMIT.txt` holds the base case's commit record, plus the clone's
+`TAG`, `FSCA`, `EXTRA_NML` and `EXEROOT`.
+
+### Limits
+
+- **Run-time changes only:** `user_nl_elm` and `env_run.xml` settings (history,
+  `STOP_N`, ...). NTASKS, the compset or source code changes need a new base case.
+- **Clones depend on the base case's `bld/`.** Rerunning `TG_NLDAS2_WY20XX.sh` with
+  the same `TAG` deletes the base case and rebuilds it. That breaks the clones, or
+  silently gives them a new executable. For a new commit, use a new base `TAG`
+  (`BASE_TAG` for the sweep script). The sweep script never rebuilds a built base case.
+- **Cold start:** without `FINIDAT`, soil temperature and moisture start from arbitrary
+  values. That biases the early season, the same way in every variant.
+
+### Rerunning a sweep after a bug fix
+
+A fix in the Fortran source means a new executable, which the old clones can't share.
+Build one new base case from the fixed commit, then clone the sweep again. The old
+sweep stays in place for comparison.
+
+1. **Fix and unit-test locally** (tier 1). Add a test that would have caught the bug.
+   Commit on the `fsca` branch and push.
+2. **Update the source on Perlmutter:**
+   ```bash
+   cd $E3SM_ROOT && git pull && git status --short   # should print nothing
+   ```
+   A clean tree makes `E3SM_COMMIT.txt` record the exact commit, not `<hash>-dirty`.
+3. **Optional regression check** (tier 2): if the bug is in one scheme (say NY07),
+   the other schemes should be unchanged. Run the 5-day case with `FSCA=SL12` on the
+   old and new commits and compare them with `tools/cprnc_compare.sh`. They should be
+   identical, which shows the fix touched only what it was meant to.
+4. **Run the sweep with a new base tag.** It builds a new base case from the fixed
+   commit and clones every variant from it. Don't reuse `base`, because the old clones
+   still need its `bld/`:
+   ```bash
+   BASE_TAG=fix1 ./sweep_fsca.sh
+   ```
+   With the same `BASE_TAG`, the script would keep the old build and only warn that
+   `E3SM_ROOT` has moved.
+5. **Check the runs finished** (rerun the same command; see Steps above).
+6. **Compare old and new pairs**, e.g. `TG_NLDAS2_WY2012_base_NY07` with
+   `TG_NLDAS2_WY2012_fix1_NY07`, and the base cases themselves (the SL12 runs). Only
+   the variants that use the buggy code should differ.
+7. **Clean up** the old sweep when you no longer need it. Delete its clones
+   (`$OUTPUT_ROOT/clones/<case>` and `$OUTPUT_ROOT/<case>`) before or together with
+   the old base case, since they use its executable.
+
+### Debugging shortcut: rebuild the base case in place
+
+While you're still trying out a fix, a full new base case each time is slow. Instead,
+rebuild the existing base case and rerun its clones:
+
+```bash
+cd $E3SM_ROOT && git pull                     # or edit the source directly
+cd $OUTPUT_ROOT/TG_NLDAS2_WY2012_base/case_scripts
+./case.build                                  # recompiles only the changed files
+cd $OUTPUT_ROOT/clones/TG_NLDAS2_WY2012_base_NY07
+./case.submit --no-batch                      # inside salloc; ./case.submit otherwise
+```
+
+- `case.build` in an already built case is incremental: `make` recompiles only the
+  source files that changed (and those that depend on them), then relinks. This should
+  take a few minutes, not 20.
+- The clones point at the same `bld/`, so they pick up the new executable with no
+  re-cloning. Just submit them again, or redo the whole sweep with
+  `RERUN=all ./sweep_fsca.sh`. That re-clones each variant from the rebuilt base case,
+  which takes about a minute each with no build. The sweep doesn't rerun the base
+  case's own (SL12) run, so submit that yourself from its `case_scripts/` too.
+
+What this costs:
+- Each run overwrites that case's old output in `run/`, so there's nothing left to
+  compare against. Copy the files you want to keep first.
+- Every `E3SM_COMMIT.txt` (base case and clones) now records the old commit. It's
+  wrong.
+- Uncommitted edits get compiled in too, and nothing records them.
+
+Use the shortcut for debugging only. For results you'll keep or show, build a new
+base case (steps 4-5 above), so each case's record matches the code it ran.
