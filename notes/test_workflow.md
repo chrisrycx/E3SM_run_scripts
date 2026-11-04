@@ -184,6 +184,7 @@ melt after snowfall on purpose, so it isn't expected to match.
 5. **Check that both runs finished:** `tail case_scripts/CaseStatus` in each case should
    show `case.run success`.
 6. **Compare the output with cprnc:**
+   See /tools/cprnc_compare.sh
    ```bash
    CPRNC=/global/cfs/cdirs/e3sm/tools/cprnc/cprnc
    B=$OUTPUT_ROOT/TG_NLDAS2_5d_2000_baseline/run
