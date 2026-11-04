@@ -13,6 +13,9 @@ when relevant, and cite the source file or doc you used.
   optional `_<tag>` for variants. `TG_NLDAS2_2000-2002.sh` is the template to copy.
   Short test runs are named `<region>_<forcing>_<N>d_<startyear>.sh` (e.g.
   `TG_NLDAS2_5d_2000.sh`, a 5-day run whose case name is `TG_NLDAS2_5d_2000_<TAG>`).
+  Snow-season runs (1 Oct to 30 Jun) are named by water year:
+  `<region>_<forcing>_WY20XX.sh` (e.g. `TG_NLDAS2_WY20XX.sh`; set `WY`, default 2012 = Oct 2011 - Jun 2012),
+  case name `TG_NLDAS2_WY<wy>_<TAG>`; this is the base case for parameter sweeps.
   `first_run_TG.sh` is the original first test.
 - `run_scripts/config/`: `user_nl_elm_<SITE>` namelist templates, plus
   `machine.env.example`. Real `*.env` files are gitignored and set `E3SM_ROOT`,
