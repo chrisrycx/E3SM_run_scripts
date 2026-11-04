@@ -189,9 +189,12 @@ melt after snowfall on purpose, so it isn't expected to match.
    CPRNC=/global/cfs/cdirs/e3sm/tools/cprnc/cprnc
    B=$OUTPUT_ROOT/TG_NLDAS2_5d_2000_baseline/run
    N=$OUTPUT_ROOT/TG_NLDAS2_5d_2000_new/run
-   $CPRNC $B/*.elm.r.*.nc  $N/*.elm.r.*.nc  | tail -20    # restart: full model state
-   $CPRNC $B/*.elm.h1.*.nc $N/*.elm.h1.*.nc | tail -20    # hourly history
+   $CPRNC -m $B/*.elm.r.*.nc  $N/*.elm.r.*.nc  | tail -20    # restart: full model state
+   $CPRNC -m $B/*.elm.h1.*.nc $N/*.elm.h1.*.nc | tail -20    # hourly history
    ```
+   `-m` compares records by position. Restart files have no time dimension, so
+   without it cprnc stops with "These files don't have a time dimension, use cprnc
+   with -m" before it compares anything.
 7. **Return to your branch:**
    ```bash
    cd $E3SM_ROOT && git checkout fsca && git submodule update --init --recursive
@@ -206,6 +209,9 @@ melt after snowfall on purpose, so it isn't expected to match.
   fields in `hist_fincl` (18 here), but the restart file holds the whole model state:
   every snow layer, temperature and water store. Any difference anywhere shows up
   there.
+- A variable in only one file ("Could not find match for file2 variable ...") is
+  skipped, not counted as a difference. It's expected when the new code adds a
+  restart field, e.g. `SWE_MAX_EFF` in `fe85f116b9`.
 - Compare matching files only (`r` with `r`, `h1` with `h1`). Ignore the logs, since
   they contain timestamps and timings.
 

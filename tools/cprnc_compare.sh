@@ -13,6 +13,9 @@
 # after the case name, so baseline.elm.r.2000-01-06-00000.nc is compared with
 # <case_name>.elm.r.2000-01-06-00000.nc.
 # The full cprnc output goes to <case>/cprnc/vs_<BASELINE_CASE>.*.txt.
+# Runs cprnc -m (as CIME's regression tests do). Variables present in only one
+# file, e.g. a restart field the new code adds, are listed but don't count as a
+# difference.
 # Exit status: 0 if every pair is identical, 1 otherwise.
 set -euo pipefail
 
@@ -23,7 +26,7 @@ FILE_TYPES=(elm.r elm.h0 elm.h1)   # restart first: it holds the whole model sta
 
 # --- Arguments and environment --------------------------------------------------
 if [ $# -lt 1 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
-    sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'
     exit 1
 fi
 CASE_ARG=$1
@@ -83,6 +86,7 @@ echo
 n_same=0
 n_diff=0
 n_missing=0
+n_err=0
 shopt -s nullglob
 for type in "${FILE_TYPES[@]}"; do
     base_files=("$BASE_DIR/run/$BASELINE_CASE.$type."*.nc)
@@ -100,25 +104,34 @@ for type in "${FILE_TYPES[@]}"; do
             continue
         fi
         log=$LOG_DIR/vs_${BASELINE_CASE}${suffix%.nc}.txt
-        "$CPRNC" "$base_file" "$new_file" > "$log" 2>&1 || true
+        # -m: compare records by position, not by matching "time" values.
+        # Restart files have no time dimension and cprnc aborts without it.
+        "$CPRNC" -m "$base_file" "$new_file" > "$log" 2>&1 || true
+        # Variables present in only one file (e.g. a restart field added by the
+        # new code) are skipped by cprnc; list them so they aren't overlooked.
+        only_one=$(grep -E "Could not find match|not found on file" "$log" || true)
         # cprnc's summary ends with "files seem to be IDENTICAL" or "... DIFFERENT"
-        if grep -q "IDENTICAL" "$log"; then
+        if grep -q "seem to be IDENTICAL" "$log"; then
             echo "IDENTICAL  $label"
             n_same=$((n_same + 1))
-        else
+        elif grep -q "seem to be DIFFERENT" "$log"; then
             echo "DIFFERENT  $label   -> $log"
-            # Show the summary lines with field-level diff counts
-            grep -E "diff_field|DIFFERENT|different" "$log" | tail -10 | sed 's/^/    /'
+            grep -E "diff_field|RMS|had non-zero" "$log" | head -20 | sed 's/^/    /'
             n_diff=$((n_diff + 1))
+        else
+            echo "ERROR      $label   (cprnc gave no summary) -> $log"
+            tail -5 "$log" | sed 's/^/    /'
+            n_err=$((n_err + 1))
         fi
+        [ -n "$only_one" ] && echo "$only_one" | sed 's/^ */    in one file only: /'
     done
 done
 
 echo
-echo "Summary: $n_same identical, $n_diff different, $n_missing missing"
+echo "Summary: $n_same identical, $n_diff different, $n_missing missing, $n_err errors"
 echo "Full cprnc output: $LOG_DIR"
 if [ $n_same -eq 0 ]; then
     echo "No files were compared." >&2
     exit 1
 fi
-[ $n_diff -eq 0 ] && [ $n_missing -eq 0 ]
+[ $n_diff -eq 0 ] && [ $n_missing -eq 0 ] && [ $n_err -eq 0 ]
