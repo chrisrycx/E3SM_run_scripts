@@ -1,18 +1,20 @@
 #!/bin/bash
-# Compare a test case's ELM output against the baseline case with cprnc
+# Compare a new case's ELM output against a base case with cprnc
 # (tier 2 regression test, step 6 of notes/test_workflow.md).
 #
-# Usage: ./cprnc_compare.sh <case_name> [path/to/machine.env]
-#   case_name  the case to compare, e.g. TG_NLDAS2_5d_2000_new. It is looked up
-#              under $OUTPUT_ROOT; an absolute path to a case directory also works.
+# Usage: ./cprnc_compare.sh <base_case> <new_case> [path/to/machine.env]
+#   base_case  the reference case, e.g. TG_NLDAS2_5d_2000_baseline
+#   new_case   the case to compare, e.g. TG_NLDAS2_5d_2000_new
+#              Both are looked up under $OUTPUT_ROOT; an absolute path to a case
+#              directory also works.
 #   env file   defaults to ../run_scripts/config/${MACHINE_ENV:-pm-cpu}.env
 #              (only OUTPUT_ROOT is used).
 #
 # Compares the restart file (*.elm.r.*, full model state) first, then the daily
 # (h0) and hourly (h1) history files. Files are paired by the part of the name
-# after the case name, so baseline.elm.r.2000-01-06-00000.nc is compared with
-# <case_name>.elm.r.2000-01-06-00000.nc.
-# The full cprnc output goes to <case>/cprnc/vs_<BASELINE_CASE>.*.txt.
+# after the case name, so <base_case>.elm.r.2000-01-06-00000.nc is compared with
+# <new_case>.elm.r.2000-01-06-00000.nc.
+# The full cprnc output goes to <new_case>/cprnc/vs_<base_case>.*.txt.
 # Runs cprnc -m (as CIME's regression tests do). Variables present in only one
 # file, e.g. a restart field the new code adds, are listed but don't count as a
 # difference.
@@ -21,18 +23,18 @@ set -euo pipefail
 
 # --- Hardcoded settings ---------------------------------------------------------
 CPRNC=/global/cfs/cdirs/e3sm/tools/cprnc/cprnc
-BASELINE_CASE=TG_NLDAS2_5d_2000_baseline
 FILE_TYPES=(elm.r elm.h0 elm.h1)   # restart first: it holds the whole model state
 
 # --- Arguments and environment --------------------------------------------------
-if [ $# -lt 1 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
-    sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'
+if [ $# -lt 2 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'
     exit 1
 fi
-CASE_ARG=$1
+BASE_ARG=$1
+NEW_ARG=$2
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENV_FILE="${2:-$SCRIPT_DIR/../run_scripts/config/${MACHINE_ENV:-pm-cpu}.env}"
+ENV_FILE="${3:-$SCRIPT_DIR/../run_scripts/config/${MACHINE_ENV:-pm-cpu}.env}"
 if [ ! -f "$ENV_FILE" ]; then
     echo "Env file not found: $ENV_FILE" >&2
     exit 1
@@ -45,13 +47,14 @@ if [ ! -x "$CPRNC" ]; then
     exit 1
 fi
 
-if [[ "$CASE_ARG" = /* ]]; then
-    NEW_DIR=${CASE_ARG%/}
-else
-    NEW_DIR=$OUTPUT_ROOT/$CASE_ARG
-fi
+# A case argument is a name under $OUTPUT_ROOT or an absolute case directory
+case_dir() {
+    if [[ "$1" = /* ]]; then echo "${1%/}"; else echo "$OUTPUT_ROOT/$1"; fi
+}
+BASE_DIR=$(case_dir "$BASE_ARG")
+NEW_DIR=$(case_dir "$NEW_ARG")
+BASELINE_CASE=$(basename "$BASE_DIR")
 NEW_CASE=$(basename "$NEW_DIR")
-BASE_DIR=$OUTPUT_ROOT/$BASELINE_CASE
 
 for d in "$BASE_DIR" "$NEW_DIR"; do
     if [ ! -d "$d/run" ]; then
@@ -64,15 +67,15 @@ for d in "$BASE_DIR" "$NEW_DIR"; do
     fi
 done
 
-if [ "$NEW_CASE" = "$BASELINE_CASE" ]; then
-    echo "The comparison case is the baseline itself: $NEW_CASE" >&2
+if [ "$NEW_DIR" = "$BASE_DIR" ]; then
+    echo "The base and new case are the same: $NEW_DIR" >&2
     exit 1
 fi
 
 LOG_DIR=$NEW_DIR/cprnc
 mkdir -p "$LOG_DIR"
 
-echo "Baseline: $BASE_DIR"
+echo "Base:     $BASE_DIR"
 echo "Compare:  $NEW_DIR"
 for d in "$BASE_DIR" "$NEW_DIR"; do
     commit_file=$d/case_scripts/E3SM_COMMIT.txt
