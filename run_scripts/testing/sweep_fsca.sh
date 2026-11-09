@@ -38,15 +38,15 @@ set -a; source "$ENV_FILE"; set +a
 # --- Sweep definition -----------------------------------------------------------
 WY="${WY:-2012}"
 BASE_TAG="${BASE_TAG:-base}"
-BASE_FSCA=SL12   # the base case is itself the SL12 run, so SL12 isn't a variant
+BASE_FSCA=SL12_legacy   # the base case is itself the SL12_legacy run, so SL12_legacy isn't a variant
 
 # variant <TAG> <FSCA> [<EXTRA_NML>]   FSCA "" keeps the base case's value
 TAGS=(); FSCAS=(); EXTRAS=()
 variant() { TAGS+=("$1"); FSCAS+=("$2"); EXTRAS+=("${3:-}"); }
 
-variant SL12_legacy SL12_legacy
+variant SL12        SL12
 variant NY07        NY07
-variant Helbig21    Helbig21
+variant AR25        AR25
 variant CZ26        CZ26
 
 # --- Base case ------------------------------------------------------------------
