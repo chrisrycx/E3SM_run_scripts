@@ -162,6 +162,11 @@ for ivar = 1:nvars
         case 'frac'
             data = ones(size(lon_region, 1),size(lon_region, 2));
         case 'area'
+            % ELM reads 'area' in radian^2 (steradians) and multiplies by
+            % re^2 to get km^2 (surfrdMod.F90, surfrd_get_grid). The
+            % original code returned deg^2, e.g. 0.015625 for a 0.125 deg
+            % cell, which ELM turned into ~634,000 km^2.
+            d2r = pi/180;
             if (size(lonv_region,1) == 3)
                 ax = lonv_region(1, :,:);
                 ay = latv_region(1,:,:);
@@ -169,10 +174,17 @@ for ivar = 1:nvars
                 by = latv_region(2, :,:);
                 cx = lonv_region(3, :,:);
                 cy = latv_region(3,:,:);
-                
-                data = 0.5*(ax.*(by-cy) + bx.*(cy-ay) + cx.*(ay-by));
+
+                % planar area in deg^2, scaled by cos(lat) at the centroid
+                % (fine for small cells)
+                data = abs(0.5*(ax.*(by-cy) + bx.*(cy-ay) + cx.*(ay-by))) ...
+                    .* d2r^2 .* cos(d2r*(ay + by + cy)/3);
             elseif (size(lonv_region,1) == 4)
-                data = (lonv_region(1, :,:) - lonv_region(2, :,:)) .* (latv_region(1, :,:) - latv_region(3, :,:));
+                % exact area of a lat-lon rectangle on the unit sphere:
+                % dlon * (sin(lat_top) - sin(lat_bottom)), vertices
+                % ordered as in xv/yv (1-2 along longitude, 1-3 across latitude)
+                data = abs(d2r*(lonv_region(1, :,:) - lonv_region(2, :,:))) .* ...
+                    abs(sin(d2r*latv_region(1, :,:)) - sin(d2r*latv_region(3, :,:)));
             else
                 error('Added area computation')
             end
