@@ -319,8 +319,11 @@ TAG=<tag> [FSCA=<value>] [EXTRA_NML=<lines>] [BASE=<case>] [NOSUBMIT=1] ./clone_
 
 **Sweep:**
 ```bash
-[WY=<year>] [BASE_TAG=<tag>] [RERUN=<tags>|all] ./sweep_fsca.sh
+WY=<year> BASE_TAG=<tag> [RERUN=<tags>|all] ./sweep_fsca.sh
 ```
+- `WY` and `BASE_TAG` are required, with no defaults. If one is missing, the script
+  lists the existing base cases and asks for it (or stops with an error when not run
+  from a terminal).
 - The variants are listed in the script, one `variant <TAG> <FSCA> [<EXTRA_NML>]` line
   each. `FSCA ""` keeps the base value. Example:
   `variant CZ26_spheroid CZ26 "snow_shape = 'spheroid'"`.
@@ -361,7 +364,7 @@ TAG=<tag> [FSCA=<value>] [EXTRA_NML=<lines>] [BASE=<case>] [NOSUBMIT=1] ./clone_
    submits each variant as a batch job:
    ```bash
    cd ~/.../E3SM_run_scripts/run_scripts/testing
-   ./sweep_fsca.sh
+   WY=2012 BASE_TAG=base ./sweep_fsca.sh
    ```
    Inside `salloc`, the base case and the variants run one after another instead
    (20 min build + 10 min per run, so a 1-hour allocation won't fit them all). Run
@@ -427,7 +430,7 @@ sweep stays in place for comparison.
    commit and clones every variant from it. Don't reuse `base`, because the old clones
    still need its `bld/`:
    ```bash
-   BASE_TAG=fix1 ./sweep_fsca.sh
+   WY=2012 BASE_TAG=fix1 ./sweep_fsca.sh
    ```
    With the same `BASE_TAG`, the script would keep the old build and only warn that
    `E3SM_ROOT` has moved.
@@ -457,7 +460,7 @@ cd $OUTPUT_ROOT/TG_NLDAS2_WY2012_base_NY07
   take a few minutes, not 20.
 - The clones point at the same `bld/`, so they pick up the new executable with no
   re-cloning. Just submit them again, or redo the whole sweep with
-  `RERUN=all ./sweep_fsca.sh`. That re-clones each variant from the rebuilt base case,
+  `WY=2012 BASE_TAG=base RERUN=all ./sweep_fsca.sh`. That re-clones each variant from the rebuilt base case,
   which takes about a minute each with no build. Add the base case's own
   (SL12_legacy) run with `RERUN="base ..."` or `RERUN=all`.
 

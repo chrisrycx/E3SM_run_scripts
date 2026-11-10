@@ -3,11 +3,14 @@
 # Builds the base case if needed (TG_NLDAS2_WY20XX.sh), then makes and runs one clone
 # per variant (clone_variant.sh), with no further builds. See notes/test_workflow.md, tier 3.
 #
-# Usage: [WY=<year>] [BASE_TAG=<tag>] [RERUN=<tags>|all] ./sweep_fsca.sh [path/to/machine.env]
-#   WY        water year (default: 2012)
-#   BASE_TAG  base case tag (default: base). The base case is TG_NLDAS2_WY<WY>_<BASE_TAG>,
+# Usage: WY=<year> BASE_TAG=<tag> [RERUN=<tags>|all] ./sweep_fsca.sh [path/to/machine.env]
+#   WY        water year, e.g. 2012 (Oct 2011 - Jun 2012). Required.
+#   BASE_TAG  base case tag. Required. The base case is TG_NLDAS2_WY<WY>_<BASE_TAG>,
 #             and the variants are TG_NLDAS2_WY<WY>_<BASE_TAG>_<TAG>. Use a new BASE_TAG
 #             for a new E3SM commit (e.g. after a bug fix), so the old sweep is kept.
+#   There are no defaults, so a sweep never lands on the wrong base case by accident.
+#   If WY or BASE_TAG is missing, the script asks for it (listing the existing base
+#   cases) when run from a terminal, and stops with an error otherwise.
 #   RERUN     variants to redo even if finished or still marked running, e.g.
 #             RERUN="NY07 CZ26", or RERUN=all. "base" reruns the base case (without
 #             rebuilding it); "all" includes it.
@@ -38,9 +41,35 @@ set -a; source "$ENV_FILE"; set +a
 : "${E3SM_ROOT:?must be set in $ENV_FILE}"
 : "${OUTPUT_ROOT:?must be set in $ENV_FILE}"
 
+# --- Base case: water year and tag (required, no defaults) ----------------------
+WY="${WY:-}"
+BASE_TAG="${BASE_TAG:-}"
+if [ -z "$WY" ] || [ -z "$BASE_TAG" ]; then
+    if [ ! -t 0 ]; then
+        echo "Set WY and BASE_TAG, e.g. WY=2012 BASE_TAG=base ./sweep_fsca.sh" >&2
+        exit 1
+    fi
+    echo "Existing base cases (TG_NLDAS2_WY<WY>_<BASE_TAG>) in $OUTPUT_ROOT:"
+    found=0
+    for d in "$OUTPUT_ROOT"/TG_NLDAS2_WY*/case_scripts; do
+        [ -d "$d" ] || continue
+        echo "  $(basename "$(dirname "$d")")"; found=1
+    done
+    [ $found -eq 1 ] || echo "  (none)"
+    [ -n "$WY" ]       || read -r -p "Water year (WY), e.g. 2012: " WY
+    [ -n "$BASE_TAG" ] || read -r -p "Base case tag (BASE_TAG): " BASE_TAG
+fi
+if ! [[ "$WY" =~ ^[0-9]{4}$ ]]; then
+    echo "WY must be a 4-digit water year, got '$WY'" >&2
+    exit 1
+fi
+if ! [[ "$BASE_TAG" =~ ^[A-Za-z0-9_-]+$ ]]; then
+    echo "BASE_TAG must be letters, digits, _ or -, got '$BASE_TAG'" >&2
+    exit 1
+fi
+echo "Sweep base case: TG_NLDAS2_WY${WY}_${BASE_TAG}"
+
 # --- Sweep definition -----------------------------------------------------------
-WY="${WY:-2012}"
-BASE_TAG="${BASE_TAG:-base}"
 BASE_FSCA=SL12_legacy   # the base case is itself the SL12_legacy run, so SL12_legacy isn't a variant
 
 # variant <TAG> <FSCA> [<EXTRA_NML>]   FSCA "" keeps the base case's value
