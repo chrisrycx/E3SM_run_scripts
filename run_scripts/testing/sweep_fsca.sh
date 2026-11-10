@@ -9,11 +9,14 @@
 #             and the variants are TG_NLDAS2_WY<WY>_<BASE_TAG>_<TAG>. Use a new BASE_TAG
 #             for a new E3SM commit (e.g. after a bug fix), so the old sweep is kept.
 #   RERUN     variants to redo even if finished or still marked running, e.g.
-#             RERUN="NY07 CZ26", or RERUN=all
+#             RERUN="NY07 CZ26", or RERUN=all. "base" reruns the base case (without
+#             rebuilding it); "all" includes it.
 #
 # Rerunning this script is safe and cheap. It:
 #   - builds the base case only if it doesn't have a successful build. An existing base
 #     case is never deleted, because the clones use its executable.
+#   - runs the base case (it is the SL12_legacy member of the sweep) if it hasn't run or
+#     failed, with the same skip rules as the variants below
 #   - skips a variant that finished (case.run success) with the same settings
 #   - skips a variant that is queued or running, so a batch job isn't deleted under it
 #   - redoes a variant that failed, never ran, or whose settings below have changed
@@ -49,6 +52,24 @@ variant NY07        NY07
 variant AR25        AR25
 variant CZ26        CZ26
 
+# --- Helpers --------------------------------------------------------------------
+# Run status of a case, from the last case.run line in its CaseStatus
+run_status() {
+    local status_file=$1/CaseStatus last
+    [ -f "$status_file" ] || { echo none; return; }
+    last=$(grep -E "case\.run (starting|success|error)" "$status_file" | tail -1)
+    case "$last" in
+        *"case.run success"*)  echo done ;;
+        *"case.run error"*)    echo failed ;;
+        *"case.run starting"*) echo running ;;
+        *) if grep -q "case.submit success" "$status_file"; then echo queued; else echo none; fi ;;
+    esac
+}
+
+wants_rerun() {
+    [ "${RERUN:-}" = all ] || [[ " ${RERUN:-} " == *" $1 "* ]]
+}
+
 # --- Base case ------------------------------------------------------------------
 BASE="TG_NLDAS2_WY${WY}_${BASE_TAG}"
 base_scripts_dir=$OUTPUT_ROOT/$BASE/case_scripts
@@ -76,29 +97,37 @@ else
     fi
 fi
 
+# --- Base case run --------------------------------------------------------------
+# The base case is the SL12_legacy member of the sweep. Building it inside salloc
+# also runs it; otherwise (built earlier, or built now on a login node) run it here.
+# Its run doesn't change its executable, so the clones are unaffected.
+base_status=$(run_status "$base_scripts_dir")
+echo
+echo "=== $BASE (base, FSCA=$BASE_FSCA): $base_status"
+if ! wants_rerun base && { [ "$base_status" = queued ] || [ "$base_status" = running ]; }; then
+    echo "Skipping: $base_status. If its job is gone (check squeue), rerun with RERUN=base."
+    base_result="$base_status"
+elif ! wants_rerun base && [ "$base_status" = done ]; then
+    echo "Skipping: finished."
+    base_result=done
+else
+    module load python/3.10   # case.submit needs it, as in clone_variant.sh
+    submit_args=()
+    [ -n "${SLURM_JOB_ID:-}" ] && submit_args=(--no-batch)   # inside salloc: run now
+    if (cd "$base_scripts_dir" && ./case.submit "${submit_args[@]}"); then
+        base_result="run or submitted"
+    else
+        echo "FAILED: $BASE run (see the output above)" >&2
+        base_result=failed
+    fi
+fi
+
 # --- Variants -------------------------------------------------------------------
-# Run status of a case, from the last case.run line in its CaseStatus
-run_status() {
-    local status_file=$1/CaseStatus last
-    [ -f "$status_file" ] || { echo none; return; }
-    last=$(grep -E "case\.run (starting|success|error)" "$status_file" | tail -1)
-    case "$last" in
-        *"case.run success"*)  echo done ;;
-        *"case.run error"*)    echo failed ;;
-        *"case.run starting"*) echo running ;;
-        *) if grep -q "case.submit success" "$status_file"; then echo queued; else echo none; fi ;;
-    esac
-}
-
-wants_rerun() {
-    [ "${RERUN:-}" = all ] || [[ " ${RERUN:-} " == *" $1 "* ]]
-}
-
 done_tags=(); started_tags=(); skipped_tags=(); failed_tags=()
 for i in "${!TAGS[@]}"; do
     tag=${TAGS[$i]}; fsca=${FSCAS[$i]}; extra=${EXTRAS[$i]}
     case_name="${BASE}_${tag}"
-    clone_dir=$OUTPUT_ROOT/clones/$case_name
+    clone_dir=$OUTPUT_ROOT/$case_name
     # The variant's settings, saved in the clone to notice when they change
     signature=$(printf 'FSCA=%s\nEXTRA_NML=%s\n' "$fsca" "$extra")
     status=$(run_status "$clone_dir")
@@ -130,10 +159,11 @@ done
 
 # --- Summary --------------------------------------------------------------------
 echo
-echo "Sweep $BASE: ${#TAGS[@]} variants"
+echo "Sweep $BASE: base case + ${#TAGS[@]} variants"
+echo "  base case ($BASE_FSCA): $base_result"
 echo "  already finished:  ${done_tags[*]:-}"
 echo "  run or submitted:  ${started_tags[*]:-}"
 echo "  queued or running: ${skipped_tags[*]:-}"
 echo "  failed:            ${failed_tags[*]:-}"
-echo "Run status per case: tail $OUTPUT_ROOT/clones/${BASE}_*/CaseStatus"
-[ ${#failed_tags[@]} -eq 0 ]
+echo "Run status per case: tail $base_scripts_dir/CaseStatus $OUTPUT_ROOT/${BASE}_*/CaseStatus"
+[ ${#failed_tags[@]} -eq 0 ] && [ "$base_result" != failed ]

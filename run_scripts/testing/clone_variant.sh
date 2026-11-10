@@ -29,11 +29,13 @@
 #     code) needs a new base case.
 #   - The clones share the base executable. Don't delete or rebuild the base case
 #     (rerunning TG_NLDAS2_WY20XX.sh with TAG=base deletes it) while clones still need it.
-#   - The clone's case name is the last part of its directory path, so the clone's
-#     case scripts can't go in $OUTPUT_ROOT/<case>/case_scripts like the base case.
-#     Layout:
-#       case scripts: $OUTPUT_ROOT/clones/<case>/
+#   - create_clone takes the clone's case name from the last part of its directory
+#     path, so its case scripts can't go in <case>/case_scripts like the base case's
+#     (the case would be named "case_scripts"). Instead the case directory is
+#     $OUTPUT_ROOT/<case> itself, with the run dir inside it:
+#       case scripts: $OUTPUT_ROOT/<case>/
 #       run dir:      $OUTPUT_ROOT/<case>/run/   (same place as for base cases)
+#     and no bld/, since the clone uses the base case's.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -64,16 +66,16 @@ if ! grep -q "case.build success" "$base_scripts_dir/CaseStatus"; then
 fi
 
 CASE_NAME="${BASE}_${TAG}"
-case_scripts_dir=$OUTPUT_ROOT/clones/$CASE_NAME
-run_dir=$OUTPUT_ROOT/$CASE_NAME/run
+case_scripts_dir=$OUTPUT_ROOT/$CASE_NAME
+run_dir=$case_scripts_dir/run
 
-for d in "$case_scripts_dir" "$OUTPUT_ROOT/$CASE_NAME"; do
+# also clears the older layout, which kept the case scripts in $OUTPUT_ROOT/clones/
+for d in "$case_scripts_dir" "$OUTPUT_ROOT/clones/$CASE_NAME"; do
     if [ -d "$d" ]; then
         echo "Deleting old case directory: $d"
         rm -rf "$d"
     fi
 done
-mkdir -p "$OUTPUT_ROOT/clones"
 
 # --- Clone --------------------------------------------------------------------
 "$E3SM_ROOT/cime/scripts/create_clone" --clone "$base_scripts_dir" \
