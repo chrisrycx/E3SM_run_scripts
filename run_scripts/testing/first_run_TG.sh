@@ -18,7 +18,7 @@ set -a; source "$ENV_FILE"; set +a
 : "${DATA_ROOT:?must be set in $ENV_FILE}"
 : "${OUTPUT_ROOT:?must be set in $ENV_FILE}"
 
-module load python/3.10
+module load python/3.13
 
 export RES=ELM_USRDAT 
 export COMPSET=IELMBC

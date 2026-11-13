@@ -140,7 +140,7 @@ elif ! wants_rerun base && [ "$base_status" = done ]; then
     echo "Skipping: finished."
     base_result=done
 else
-    module load python/3.10   # case.submit needs it, as in clone_variant.sh
+    module load python/3.13   # case.submit needs it, as in clone_variant.sh
     submit_args=()
     [ -n "${SLURM_JOB_ID:-}" ] && submit_args=(--no-batch)   # inside salloc: run now
     if (cd "$base_scripts_dir" && ./case.submit "${submit_args[@]}"); then

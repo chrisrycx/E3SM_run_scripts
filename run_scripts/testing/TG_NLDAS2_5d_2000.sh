@@ -24,7 +24,7 @@
 #      If you run it on a login node, it builds the case and stops, and you can submit later.
 #   3. Iterate in the same allocation without rebuilding. Changes to user_nl_elm,
 #      STOP_N or the history settings don't need a rebuild:
-#        module load python/3.10   # needed in the salloc shell, or srun's args break
+#        module load python/3.13   # needed in the salloc shell, or srun's args break
 #        cd $OUTPUT_ROOT/TG_NLDAS2_5d_2000_<TAG>/case_scripts
 #        vi user_nl_elm && ./preview_namelists
 #        ./case.submit --no-batch
@@ -52,7 +52,7 @@ set -a; source "$ENV_FILE"; set +a
 : "${DATA_ROOT:?must be set in $ENV_FILE}"
 : "${OUTPUT_ROOT:?must be set in $ENV_FILE}"
 
-module load python/3.10
+module load python/3.13
 
 # --- E3SM source version --------------------------------------------------------
 # The case compiles whatever is in E3SM_ROOT, including uncommitted edits. Then

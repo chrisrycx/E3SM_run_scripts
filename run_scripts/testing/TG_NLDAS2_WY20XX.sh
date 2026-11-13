@@ -33,7 +33,7 @@
 #      If you run it on a login node, it builds the case and stops, and you can submit later.
 #   3. Iterate in the same allocation without rebuilding. Changes to user_nl_elm,
 #      STOP_N or the history settings don't need a rebuild:
-#        module load python/3.10   # needed in the salloc shell, or srun's args break
+#        module load python/3.13   # needed in the salloc shell, or srun's args break
 #        cd $OUTPUT_ROOT/TG_NLDAS2_WY<WY>_<TAG>/case_scripts
 #        vi user_nl_elm && ./preview_namelists
 #        ./case.submit --no-batch
@@ -45,8 +45,9 @@
 #   Logs:   $OUTPUT_ROOT/TG_NLDAS2_WY<WY>_<TAG>/run/{lnd,cpl,e3sm}.log.*  (gzipped on success)
 #   Output: $OUTPUT_ROOT/TG_NLDAS2_WY<WY>_<TAG>/run/*.elm.h0.*.nc, restart *.elm.r.*.nc
 #
-# Without an allocation, plain ./case.submit sends the job to the debug queue (30 min max).
-# If a 273-day run doesn't fit in that, raise JOB_WALLCLOCK_TIME and use JOB_QUEUE=regular.
+# Without an allocation, plain ./case.submit sends the job to the regular queue
+# (JOB_QUEUE/JOB_WALLCLOCK_TIME below), currently 1h for a 273-day run; the debug
+# queue is capped at 30 min, too short for a full water year.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -62,7 +63,7 @@ set -a; source "$ENV_FILE"; set +a
 : "${DATA_ROOT:?must be set in $ENV_FILE}"
 : "${OUTPUT_ROOT:?must be set in $ENV_FILE}"
 
-module load python/3.10
+module load python/3.13
 
 # --- E3SM source version --------------------------------------------------------
 # The case compiles whatever is in E3SM_ROOT, including uncommitted edits. Then
@@ -150,7 +151,7 @@ cd "$case_scripts_dir"
 # JOB_QUEUE/JOB_WALLCLOCK_TIME only apply to batch submission; --no-batch ignores them.
 ./xmlchange RUN_STARTDATE="${YEAR_START}-10-01",STOP_OPTION=ndays,STOP_N=$STOP_DAYS
 ./xmlchange REST_OPTION=ndays,REST_N=$STOP_DAYS
-./xmlchange JOB_QUEUE=debug,JOB_WALLCLOCK_TIME="00:30:00"
+./xmlchange JOB_QUEUE=regular,JOB_WALLCLOCK_TIME="01:00:00"
 # No short-term archiving: logs and history files stay in run/ instead of moving
 # to $OUTPUT_ROOT/archive/$CASE_NAME after the run
 ./xmlchange DOUT_S=FALSE
@@ -222,7 +223,7 @@ else
     echo "Case built: $case_scripts_dir"
     echo "To run interactively:"
     echo "  salloc --nodes 1 --qos interactive --time 01:00:00 --constraint cpu --account $PROJECT"
-    echo "  module load python/3.10"
+    echo "  module load python/3.13"
     echo "  cd $case_scripts_dir && ./case.submit --no-batch"
     echo "Or submit to the debug queue: cd $case_scripts_dir && ./case.submit"
 fi

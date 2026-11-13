@@ -51,7 +51,7 @@ set -a; source "$ENV_FILE"; set +a
 : "${OUTPUT_ROOT:?must be set in $ENV_FILE}"
 : "${TAG:?set TAG for the new case, e.g. TAG=NY07}"
 
-module load python/3.10
+module load python/3.13
 
 # --- Cases --------------------------------------------------------------------
 BASE="${BASE:-TG_NLDAS2_WY2012_base}"
