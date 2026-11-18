@@ -119,7 +119,7 @@ PROJECT=${PROJECT:-m4986}
 # Copied from Enrico's WUS_surface_data_FSCA/ (see ezdemo/run_WUS_fsca.sh).
 # 0.125 deg, 235-256E, 32-50N: inside the NLDAS2 domain.
 domainPath=$DATA_ROOT/WUS/
-domainFile=domain_WUS_0125_c260113.nc
+domainFile=domain_WUS_0125_c260113_areafix.nc   # area fixed to radian^2 (orig. had deg^2)
 surfdataFile=surfdata_WUS_0125_c260113_merged.nc
 
 # --- Create case --------------------------------------------------------------

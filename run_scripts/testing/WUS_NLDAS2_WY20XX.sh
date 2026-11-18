@@ -149,7 +149,7 @@ PROJECT=${PROJECT:-m4986}
 # 0.125 deg, 235-256E, 32-50N: inside the NLDAS2 domain. Same surfdata variables
 # as the TG file, including the HELBIG_* fields the fSCA schemes read.
 domainPath=$DATA_ROOT/WUS/
-domainFile=domain_WUS_0125_c260113.nc
+domainFile=domain_WUS_0125_c260113_areafix.nc   # area fixed to radian^2 (orig. had deg^2)
 surfdataFile=surfdata_WUS_0125_c260113_merged.nc
 
 # --- Create case --------------------------------------------------------------
