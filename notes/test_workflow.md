@@ -103,7 +103,8 @@ The `.o` and `.mod` files are gitignored by E3SM's `.gitignore`, but the executa
 ## 2. Short ELM run
 
 A 5-day run at Tony Grove with `run_scripts/testing/TG_NLDAS2_5d_2000.sh` checks that
-the code builds and runs in the full model. To check that a change *didn't* alter the
+the code builds and runs in the full model. (`WUS_NLDAS2_5d_2000.sh` is the same test
+over the Western US. Use it to check the WUS setup before a WUS sweep; see tier 3.) To check that a change *didn't* alter the
 model's answers, run a **regression test**: run the same case from two commits and
 compare the output bit for bit.
 
@@ -247,17 +248,22 @@ A sweep runs one snow season many times, changing one namelist setting at a time
 every `snow_fsca_param` scheme. At Tony Grove, the season run (1 Oct to 1 Jul, 273
 days) takes about 20 min to build and about 10 min to run.
 
+The same scripts sweep the Western US (`REGION=WUS`, 21872 land cells on 512 tasks /
+4 nodes). A WUS season run hasn't been timed yet. The rough estimate is about an hour
+per run, so run WUS sweeps from a login node, as batch jobs (see
+[Western US](#western-us-region) below).
+
 ### The idea: build once, clone many
 
 The model executable doesn't depend on `user_nl_elm`. The namelist is read when the
 model starts. So cases that differ only in namelist settings can share one executable:
 
 ```
-TG_NLDAS2_WY20XX.sh  →  base case (full build, ~20 min)  →  bld/e3sm.exe
-                              │
-clone_variant.sh  ─────────── ├─ clone _NY07      (no build, own user_nl_elm, own run/)
-                              ├─ clone _Helbig21
-                              └─ clone _CZ26
+<REGION>_NLDAS2_WY20XX.sh  →  base case (full build, ~20 min)  →  bld/e3sm.exe
+                                   │
+clone_variant.sh  ──────────────── ├─ clone _NY07      (no build, own user_nl_elm, own run/)
+                                   ├─ clone _Helbig21
+                                   └─ clone _CZ26
 ```
 
 `sweep_fsca.sh` runs both steps: it builds the base case if needed, then clones each
@@ -273,7 +279,7 @@ There are three scripts in `run_scripts/testing/`, one per job:
 
 | Script | Job | Changes when |
 |---|---|---|
-| `TG_NLDAS2_WY20XX.sh` | create and build one case (the base) | the site, forcing, season or history output changes |
+| `TG_NLDAS2_WY20XX.sh`, `WUS_NLDAS2_WY20XX.sh` | create and build one case (the base), one script per region | the site, forcing, season or history output changes |
 | `clone_variant.sh` | clone a built case, change its namelist, run it | rarely (it's generic) |
 | `sweep_<name>.sh`, e.g. `sweep_fsca.sh` | list one experiment's variants; build the base if needed, then clone each variant | you add or change a variant |
 
@@ -297,9 +303,12 @@ Why three scripts instead of one script that builds and then runs every variant:
 **Base case:**
 ```bash
 [WY=<year>] [TAG=<tag>] [FSCA=<value>] [FINIDAT=<file>] [EXTRA_NML=<lines>] ./TG_NLDAS2_WY20XX.sh
+[WY=<year>] [TAG=<tag>] [FSCA=<value>] [NTASKS=<n>] [FINIDAT=<file>] [EXTRA_NML=<lines>] ./WUS_NLDAS2_WY20XX.sh
 ```
 - `WY`: water year, default 2012 (Oct 2011 - Jun 2012). NLDAS2 allows 1981-2018.
-- `TAG`: default `base`. The case is `$OUTPUT_ROOT/TG_NLDAS2_WY<WY>_<TAG>`.
+- `TAG`: default `base`. The case is `$OUTPUT_ROOT/<REGION>_NLDAS2_WY<WY>_<TAG>`.
+- `NTASKS` (WUS only): MPI tasks, default 512 (4 nodes). TG is fixed at 96 (1 cell
+  per task).
 - `FINIDAT`: initial conditions from a restart file. Unset = cold start.
 - `EXTRA_NML`: extra `user_nl_elm` lines, appended as-is.
 
@@ -313,29 +322,33 @@ TAG=<tag> [FSCA=<value>] [EXTRA_NML=<lines>] [BASE=<case>] [NOSUBMIT=1] ./clone_
 - `FSCA` replaces the base case's `snow_fsca_param` line. Any variable set in
   `EXTRA_NML` replaces that variable's line from the base case, so nothing is set twice.
 - Inside `salloc`, each variant runs right away with `case.submit --no-batch`, one after
-  another (about 5 per 1-hour allocation). On a login node, each is submitted as a
-  batch job (debug queue), so a loop queues all of them at once. `NOSUBMIT=1` only
+  another (about 5 TG runs per 1-hour allocation). On a login node, each is submitted
+  as a batch job, with the queue and time limit of the base case (regular queue; 1 h
+  for TG, 3 h for WUS), so a loop queues all of them at once. `NOSUBMIT=1` only
   creates the case.
 
 **Sweep:**
 ```bash
-WY=<year> BASE_TAG=<tag> [RERUN=<tags>|all] ./sweep_fsca.sh
+[REGION=TG|WUS] WY=<year> BASE_TAG=<tag> [RERUN=<tags>|all] ./sweep_fsca.sh
 ```
+- `REGION`: default `TG`. Picks the base-case script `<REGION>_NLDAS2_WY20XX.sh` and
+  the case-name prefix. Variables that script reads, like `NTASKS` for WUS, pass
+  through from the environment.
 - `WY` and `BASE_TAG` are required, with no defaults. If one is missing, the script
   lists the existing base cases and asks for it (or stops with an error when not run
   from a terminal).
 - The variants are listed in the script, one `variant <TAG> <FSCA> [<EXTRA_NML>]` line
   each. `FSCA ""` keeps the base value. Example:
   `variant CZ26_spheroid CZ26 "snow_shape = 'spheroid'"`.
-- The base case is `TG_NLDAS2_WY<WY>_<BASE_TAG>`, run with `BASE_FSCA=SL12_legacy`. It
+- The base case is `<REGION>_NLDAS2_WY<WY>_<BASE_TAG>`, run with `BASE_FSCA=SL12_legacy`. It
   is the SL12_legacy run of the sweep, so SL12_legacy isn't listed as a variant. The
   sweep runs it like a variant (same skip rules; `RERUN=base` to redo it).
-- The variants are `TG_NLDAS2_WY<WY>_<BASE_TAG>_<TAG>`.
+- The variants are `<REGION>_NLDAS2_WY<WY>_<BASE_TAG>_<TAG>`.
 - What it does with each piece on a rerun:
 
   | State | Action |
   |---|---|
-  | Base case has no successful build | build it (`TG_NLDAS2_WY20XX.sh`) |
+  | Base case has no successful build | build it (`<REGION>_NLDAS2_WY20XX.sh`) |
   | Base case built | keep it; warn if `E3SM_ROOT` is now at another commit |
   | Base case built but never run, or its run failed | run it (no rebuild) |
   | Base case finished, queued or running | skip (`RERUN=base` reruns it) |
@@ -379,6 +392,37 @@ WY=<year> BASE_TAG=<tag> [RERUN=<tags>|all] ./sweep_fsca.sh
 For a one-off variant outside a sweep, use `clone_variant.sh` directly, e.g.
 `TAG=spheroid EXTRA_NML="snow_shape = 'spheroid'" ./clone_variant.sh`.
 
+### Western US region
+
+The WUS scripts use the domain and surface data from `ezdemo/run_WUS_fsca.sh`, copied
+to `$DATA_ROOT/WUS/` (`domain_WUS_0125_c260113.nc`, `surfdata_WUS_0125_c260113_merged.nc`;
+0.125 deg, 168 x 144, 21872 land cells, inside the NLDAS2 domain). The surface file has
+the same variables as the TG one, so every `snow_fsca_param` scheme can run there.
+
+1. **5-day test first**, on 4 interactive nodes. It checks the input files, the 512-task
+   layout and the output, and gives the timing for the season run:
+   ```bash
+   salloc --nodes 4 --qos interactive --time 01:00:00 --constraint cpu --account m4986
+   cd ~/.../E3SM_run_scripts/run_scripts/testing
+   ./WUS_NLDAS2_5d_2000.sh
+   ```
+   Then take `seconds/mday` from `case_scripts/timing/e3sm_timing.*` and multiply by 273
+   for a season estimate. It's probably an overestimate: at TG, the 5-day run cost ~1.1 s
+   per day of ELM time against ~0.15 s for the season, because startup and the hourly tape
+   are spread over only 5 days. If the estimate is far from 3 h, change
+   `JOB_WALLCLOCK_TIME` in `WUS_NLDAS2_WY20XX.sh` before building the base case. The
+   clones copy it from the base case.
+2. **Sweep from a login node:**
+   ```bash
+   REGION=WUS WY=2012 BASE_TAG=base ./sweep_fsca.sh
+   ```
+   It builds the base case, then submits the base run and each variant as its own
+   batch job (4 nodes each), so they run side by side. Inside `salloc` they would run
+   one after another, and five WUS seasons don't fit a 4-hour interactive allocation.
+3. **Changing `NTASKS` needs a new base case** (a rebuild), like any build setting. Use
+   a new `BASE_TAG`, e.g. `NTASKS=1024 REGION=WUS WY=2012 BASE_TAG=n1024 ./sweep_fsca.sh`.
+   More than 4 nodes works only in batch.
+
 ### Where things are
 
 | | Base case | Clone |
@@ -402,8 +446,8 @@ Each clone's `E3SM_COMMIT.txt` holds the base case's commit record, plus the clo
 
 - **Run-time changes only:** `user_nl_elm` and `env_run.xml` settings (history,
   `STOP_N`, ...). NTASKS, the compset or source code changes need a new base case.
-- **Clones depend on the base case's `bld/`.** Rerunning `TG_NLDAS2_WY20XX.sh` with
-  the same `TAG` deletes the base case and rebuilds it. That breaks the clones, or
+- **Clones depend on the base case's `bld/`.** Rerunning `<REGION>_NLDAS2_WY20XX.sh`
+  with the same `TAG` deletes the base case and rebuilds it. That breaks the clones, or
   silently gives them a new executable. For a new commit, use a new base `TAG`
   (`BASE_TAG` for the sweep script). The sweep script never rebuilds a built base case.
 - **Cold start:** without `FINIDAT`, soil temperature and moisture start from arbitrary

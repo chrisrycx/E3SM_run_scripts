@@ -19,7 +19,7 @@
 #   TAG=spheroid EXTRA_NML="snow_shape = 'spheroid'" ./clone_variant.sh
 #
 # Run: inside salloc, runs now with `case.submit --no-batch` (one after another in a
-# loop). On a login node, submits a batch job (debug queue, set in the base case),
+# loop). On a login node, submits a batch job (queue and time limit set in the base case),
 # so a loop queues all variants at once. NOSUBMIT=1 only creates the case.
 #
 # How --keepexe works (CIME/case/case_clone.py): the clone's EXEROOT points to the

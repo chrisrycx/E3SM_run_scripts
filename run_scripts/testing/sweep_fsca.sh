@@ -1,12 +1,17 @@
 #!/bin/bash
-# fSCA sweep at Tony Grove: one snow season for each snow_fsca_param scheme.
-# Builds the base case if needed (TG_NLDAS2_WY20XX.sh), then makes and runs one clone
-# per variant (clone_variant.sh), with no further builds. See notes/test_workflow.md, tier 3.
+# fSCA sweep: one snow season for each snow_fsca_param scheme, at Tony Grove (TG,
+# default) or over the Western US (WUS). Builds the base case if needed
+# (<REGION>_NLDAS2_WY20XX.sh), then makes and runs one clone per variant
+# (clone_variant.sh), with no further builds. See notes/test_workflow.md, tier 3.
 #
-# Usage: WY=<year> BASE_TAG=<tag> [RERUN=<tags>|all] ./sweep_fsca.sh [path/to/machine.env]
+# Usage: [REGION=TG|WUS] WY=<year> BASE_TAG=<tag> [RERUN=<tags>|all] \
+#            ./sweep_fsca.sh [path/to/machine.env]
+#   REGION    which base-case script to use (default: TG): <REGION>_NLDAS2_WY20XX.sh
+#             in this directory. Variables the base script reads, like NTASKS for WUS,
+#             pass through from the environment when the base case is built.
 #   WY        water year, e.g. 2012 (Oct 2011 - Jun 2012). Required.
-#   BASE_TAG  base case tag. Required. The base case is TG_NLDAS2_WY<WY>_<BASE_TAG>,
-#             and the variants are TG_NLDAS2_WY<WY>_<BASE_TAG>_<TAG>. Use a new BASE_TAG
+#   BASE_TAG  base case tag. Required. The base case is <REGION>_NLDAS2_WY<WY>_<BASE_TAG>,
+#             and the variants are <REGION>_NLDAS2_WY<WY>_<BASE_TAG>_<TAG>. Use a new BASE_TAG
 #             for a new E3SM commit (e.g. after a bug fix), so the old sweep is kept.
 #   There are no defaults, so a sweep never lands on the wrong base case by accident.
 #   If WY or BASE_TAG is missing, the script asks for it (listing the existing base
@@ -26,8 +31,9 @@
 # So to add a variant, add a line below and rerun.
 #
 # Inside salloc, the base case (if built now) and the variants run one after another
-# (20 min build + 10 min per run). On a login node, the base case is only built, and
-# each variant is submitted as a batch job.
+# (TG: 20 min build + 10 min per run). On a login node, the base case is built and
+# then it and each variant are submitted as batch jobs. Use a login node for WUS:
+# at roughly an hour per season run, five runs in a row don't fit an allocation.
 set -uo pipefail   # no -e: one failed variant shouldn't stop the others
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,17 +47,26 @@ set -a; source "$ENV_FILE"; set +a
 : "${E3SM_ROOT:?must be set in $ENV_FILE}"
 : "${OUTPUT_ROOT:?must be set in $ENV_FILE}"
 
+# --- Region: picks the base-case script and the case-name prefix -----------------
+REGION="${REGION:-TG}"
+PREFIX="${REGION}_NLDAS2"
+BASE_SCRIPT="$SCRIPT_DIR/${PREFIX}_WY20XX.sh"
+if [ ! -x "$BASE_SCRIPT" ]; then
+    echo "No base-case script for REGION=$REGION: $BASE_SCRIPT" >&2
+    exit 1
+fi
+
 # --- Base case: water year and tag (required, no defaults) ----------------------
 WY="${WY:-}"
 BASE_TAG="${BASE_TAG:-}"
 if [ -z "$WY" ] || [ -z "$BASE_TAG" ]; then
     if [ ! -t 0 ]; then
-        echo "Set WY and BASE_TAG, e.g. WY=2012 BASE_TAG=base ./sweep_fsca.sh" >&2
+        echo "Set WY and BASE_TAG, e.g. REGION=$REGION WY=2012 BASE_TAG=base ./sweep_fsca.sh" >&2
         exit 1
     fi
-    echo "Existing base cases (TG_NLDAS2_WY<WY>_<BASE_TAG>) in $OUTPUT_ROOT:"
+    echo "Existing base cases (${PREFIX}_WY<WY>_<BASE_TAG>) in $OUTPUT_ROOT:"
     found=0
-    for d in "$OUTPUT_ROOT"/TG_NLDAS2_WY*/case_scripts; do
+    for d in "$OUTPUT_ROOT"/${PREFIX}_WY*/case_scripts; do
         [ -d "$d" ] || continue
         echo "  $(basename "$(dirname "$d")")"; found=1
     done
@@ -67,7 +82,7 @@ if ! [[ "$BASE_TAG" =~ ^[A-Za-z0-9_-]+$ ]]; then
     echo "BASE_TAG must be letters, digits, _ or -, got '$BASE_TAG'" >&2
     exit 1
 fi
-echo "Sweep base case: TG_NLDAS2_WY${WY}_${BASE_TAG}"
+echo "Sweep base case: ${PREFIX}_WY${WY}_${BASE_TAG}"
 
 # --- Sweep definition -----------------------------------------------------------
 BASE_FSCA=SL12_legacy   # the base case is itself the SL12_legacy run, so SL12_legacy isn't a variant
@@ -100,7 +115,7 @@ wants_rerun() {
 }
 
 # --- Base case ------------------------------------------------------------------
-BASE="TG_NLDAS2_WY${WY}_${BASE_TAG}"
+BASE="${PREFIX}_WY${WY}_${BASE_TAG}"
 base_scripts_dir=$OUTPUT_ROOT/$BASE/case_scripts
 
 if grep -q "case.build success" "$base_scripts_dir/CaseStatus" 2>/dev/null; then
@@ -115,7 +130,7 @@ if grep -q "case.build success" "$base_scripts_dir/CaseStatus" 2>/dev/null; then
 else
     echo "Building base case $BASE (FSCA=$BASE_FSCA)"
     if ! WY=$WY TAG=$BASE_TAG FSCA=$BASE_FSCA FINIDAT= EXTRA_NML= \
-            "$SCRIPT_DIR/TG_NLDAS2_WY20XX.sh" "$ENV_FILE"; then
+            "$BASE_SCRIPT" "$ENV_FILE"; then
         echo "Base case build failed; no variants run." >&2
         exit 1
     fi
