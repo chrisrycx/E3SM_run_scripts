@@ -20,13 +20,13 @@ maintain, while keeping the legacy behavior available for comparison:
 - legacy E3SM behavior (`SL12_legacy`) stays bit-for-bit reproducible, so new schemes
   can be compared with it.
 
-## Current status (2026-11-06)
+## Current status (2026-11-25)
 
 | Item | State |
 |---|---|
-| Latest commit | `2f00a8dd4a` "Simplify fSCA interfaces to make algorithm clear" |
-| Uncommitted | column-mean snow depth bookkeeping in CanopyHydrology (2026-11-06) |
-| Unit tests (laptop) | 16/16 pass |
+| Latest commit | `7a91a96a74` "Update cz26 fortran to match drop_low_bins approach" (rows below about builds and regressions were written for `2f00a8dd4a` and the column-mean change, now `7141602472`) |
+| Uncommitted | SL12 and CZ26 deplete before accumulating on snowfall steps (2026-11-25, see [fSCA timing](#fsca-timing-within-the-elm-time-step-2026-11-25)) |
+| Unit tests (laptop) | 22/22 pass |
 | Builds on Perlmutter | `2f00a8dd4a` yes; uncommitted change **not yet checked** |
 | Regression runs (tier 2) | `2f00a8dd4a` `SL12_legacy` = `edcbdcd34c` (identical history). Uncommitted change **pending** |
 | Season runs / sweeps (tier 3) | not started for the new SL12 |
@@ -50,11 +50,14 @@ if snow_fsca_param == SL12_legacy:
     if new snow:        fsca_SL12_update(newsnow)           ! accumulation
     (state: int_snow, exponent: col_pp%n_melt)
     UpdateSnowDepthNewSnow(...)                             ! new snow piled on frac_sno
-else:                                                       ! (uncommitted)
+else:
     area_old   = frac_sno (subgrid snow cover) or 1
     depth_mean = snow_depth*area_old + newsnow/bifall       ! column mean, uniform new snow
     UpdateSnowCoverFraction(swe, newsnow, depth_mean, frac_sno,
                             sigma_elev, swe_max_eff)        ! dispatches on fsca_method
+        SL12, CZ26: if swe > 0 and newsnow > 0:
+                        update(newsnow = 0)                 ! deplete to current SWE
+                    update(newsnow)                         ! accumulate (or deplete if no snow)
     area_new   = frac_sno (subgrid snow cover) or 1
     snow_depth = depth_mean/area_new                        ! back to depth over snow area
     snow layers: dz *= area_old/area_new, z and zi recomputed
@@ -74,10 +77,12 @@ Design rules:
 - **Schemes update fSCA and their own state only.** Snow depth (column mean) is an
   input; CanopyHydrology updates the stored depth. `bifall`, `subgrid`, `snowmelt` and
   `int_snow` are not part of the scheme interface.
-- **One curve per step:** accumulation if `newsnow > 0`, otherwise depletion from the
-  current SWE state. There is no "melt, then accumulate" within a step, since fSCA
-  parameterizations aren't fitted that way. Only `SL12_legacy` keeps that sequence, and it
-  lives in CanopyHydrology, not in the module.
+- **Deplete, then accumulate (SL12, CZ26).** On a step with new snow on an existing
+  pack, the dispatcher first depletes to the current SWE, then accumulates. Without
+  snowfall, only depletion runs. This replaces the earlier "one curve per step" rule
+  (2026-11-25); the reasons are in
+  [fSCA timing](#fsca-timing-within-the-elm-time-step-2026-11-25). Unlike
+  `SL12_legacy`, the depletion does not depend on `snowmelt > 0`.
 - **Legacy quirks stay in the caller.** The module has no legacy-only arguments.
 
 ### Schemes
@@ -104,7 +109,9 @@ rebuilt from `sigma_elev`.
 Intended changes, so `SL12` is **not** expected to match `SL12_legacy`:
 1. No fSCA drop on the first melt after snowfall (`swe_max_eff` is separate from
    `int_snow`, which CanopyHydrology also adds snowfall to). Since `fe85f116b9`.
-2. A step with snowfall only accumulates; no depletion first. Since `2f00a8dd4a`.
+2. ~~A step with snowfall only accumulates; no depletion first. Since `2f00a8dd4a`.~~
+   Reverted 2026-11-25 (uncommitted): SL12 depletes first, as legacy does after melt.
+   The difference from legacy is now item 3 (depletion also after sublimation).
 3. Depletion runs on every step without snowfall, not only after melt, so SWE loss by
    sublimation now lowers fSCA. Since `2f00a8dd4a`.
 4. `n_melt` comes from the gridcell `fsca_stdev_elev` instead of the column `topo_std`.
@@ -118,7 +125,8 @@ Intended changes, so `SL12` is **not** expected to match `SL12_legacy`:
 |---|---|---|
 | `SL12_legacy` = original inline CanopyHydrology code | unit test `test_SL12_legacy_matches_original`, 200k random cases, exact comparison | pass |
 | NY07, CZ26, SL12_legacy unchanged by `2f00a8dd4a` | old and new module compiled side by side, 2M random cases each, exact comparison of `frac_sno`, `snow_depth`, CZ26 `swe_max_eff` (one-off, scratch program) | 0 mismatches |
-| New SL12 behavior (items 2–4 above) | unit tests `test_SL12_one_curve_per_step`, `test_SL12_sublimation`, `test_SL12_n_melt_from_sigma` | pass |
+| New SL12 behavior (items 3–4 above) | unit tests `test_SL12_sublimation`, `test_SL12_n_melt_from_sigma` | pass |
+| Deplete then accumulate (SL12, CZ26) | unit tests `test_SL12_deplete_then_accumulate` (matches legacy after melt; no-op when SWE unchanged), `test_CZ26_deplete_then_accumulate` | pass |
 | fSCA in [0,1], depth >= 0 | unit test `test_bounds`, all schemes | pass |
 | Column-mean depth grows by exactly `newsnow/bifall` (SL12, NY07, CZ26; subgrid on and off) | unit test `test_column_mean_depth` | pass (layer rescaling not covered: it isn't in the module) |
 | CanopyHydrology compiles | only on Perlmutter | **pending** |
@@ -152,7 +160,78 @@ should now track `H2OSNO/bifall`-like accumulation, and implied pack density
 A 5-day run only exercises the code paths that occur in those 5 days. For melt and
 season reset, use the water-year run `TG_NLDAS2_WY20XX.sh`.
 
+## fSCA timing within the ELM time step (2026-11-25)
+
+Summary of a discussion on when fSCA is computed relative to SWE, and why SL12/CZ26
+now deplete before they accumulate.
+
+**Order in one step k** (from t_(k-1) to t_k), from `components/elm/src/main/elm_driver.F90`:
+
+| Order | What happens | `h2osno` seen |
+|---|---|---|
+| `BeginColWaterBalance`, `elm_drv_init` | read only (`begwb`; `h2osno_old = h2osno`; `do_capsnow`) | SWE(t_(k-1)) |
+| `CanopyHydrology` | fSCA from SWE(t_(k-1)) and `newsnow`; then `h2osno += newsnow` | SWE(t_(k-1)) |
+| `SurfaceRadiation`, `CanopyTemperature`, `SoilFluxes` | fluxes weighted by that fSCA | |
+| `SoilTemperature` → `PhaseChange` | melt, using that fSCA | SWE drops |
+| `HydrologyNoDrainage` → `CombineSnowLayers` | `h2osno` rebuilt from the layers (`SnowHydrologyMod.F90`) | SWE(t_k) |
+| step k+1, `CanopyHydrology` | fSCA from SWE(t_k) | |
+
+- `h2osno` at the start of `CanopyHydrology` is the end of the previous step's value;
+  nothing before it in the step changes it. `snowmelt` there is also last step's melt.
+- fSCA is explicit in time: it is fixed for the whole step, and the step's melt changes
+  it only at the next step. fSCA = f(SWE(t_k)) during step k would be implicit (melt
+  needs fSCA, fSCA needs post-melt SWE) and would need iteration. `frac_sno` changes
+  within a step only when the snow disappears (`SnowHydrologyMod.F90`, two places).
+- **History output is offset by one step.** At the same time stamp, `H2OSNO` = SWE(t_k)
+  after melt, but `FSNO` = f(SWE(t_(k-1)) + newsnow_k). Python recalculations of fSCA
+  from `H2OSNO` (sweep analysis) should use the previous step's `H2OSNO` plus new snow.
+
+**Why deplete, then accumulate.**
+- SL12 and CZ26 are hysteresis schemes: accumulation and depletion follow different
+  curves, so fSCA isn't a function of SWE alone. They need the gross snowfall and the SWE
+  loss separately; a net ΔSWE can't say which curve to follow (5 mm snow + 6 mm melt =
+  -1 mm, which would lose the fresh cover).
+- In ELM the two parts arrive separately: the melt (and sublimation, frost) since the last
+  call is already in `h2osno`, and `newsnow` is this step's snowfall. Depleting first
+  follows the order the events happened, because of the one-step lag.
+- In reality melt and snowfall happen at the same time. Applying them one after the
+  other is operator splitting (Lie): first-order, and it converges to the simultaneous
+  rate equation as Δt → 0. The two orders differ only by cross terms of order M·P·Δt².
+  The snow mass budget already treats them together (new snow goes into the top layer
+  and that step's melt acts on it); only the area is split.
+- With "one curve per step", accumulation started from a stale fSCA, and the
+  `swe_max_eff` reset after accumulation (inverting the melt curve) made the missed
+  depletion permanent: fSCA too high whenever snow fell on a pack that had lost SWE,
+  common in spring.
+- The depletion call does nothing when SWE hasn't changed since the last accumulation,
+  because `swe_max_eff` was set by inverting the depletion curve there. So it doesn't
+  need the `snowmelt > 0` condition that legacy uses.
+- NY07, AR25 and GFDL depend only on the current state (column-mean depth with new snow,
+  bulk density), so melt is already included; no change.
+- Possible alternative: deplete at the end of the step (after `CombineSnowLayers`)
+  with SWE(t_k). Accumulate-then-deplete within one step: no lag, and `FSNO` matches
+  `H2OSNO` in history. It is no more accurate in splitting terms, and needs `dz` /
+  `snow_depth` rescaling there too. Not done.
+
+**Timestep dependence of the accumulation curves** (open, see Open issues). This
+matters more than the melt/accumulation order. Accumulation is not linear in the new
+snow, so splitting one storm over many steps changes the result. SL12 per step:
+f → 1 - (1 - tanh(k·p))(1 - f).
+- one update with the daily total P: fSCA = tanh(kP)
+- many small steps with total P: fSCA = 1 - ∏(1 - tanh(k·p_i)) → 1 - exp(-kP)
+- kP = 1 (10 mm with k = 0.1): 0.76 vs 0.63, so sub-daily steps give less cover.
+
+CZ26 has the same problem, and it is worse: S(dSWE) and α were fitted together on daily
+SWE increments, but are applied to each 30-min `newsnow`, so both the footprint and the
+overlap act on much smaller increments than they were fitted to.
+
 ## Open issues
+
+- **Accumulation curves depend on the model timestep** (SL12, CZ26). See
+  [fSCA timing](#fsca-timing-within-the-elm-time-step-2026-11-25). Options: refit S and α
+  at the model timestep, or accumulate `newsnow` over an event or a day and apply the
+  accumulation once (needs a new state variable and an event-end rule). First, measure
+  the size of the effect in the sweep.
 
 - **Compaction uses legacy state.** `SnowHydrologyMod.F90` (`SnowCompaction`, melt
   compaction with `subgridflag == 1`) recomputes a melt fSCA from `int_snow` and
@@ -188,6 +267,12 @@ season reset, use the water-year run `TG_NLDAS2_WY20XX.sh`.
 
 ## Log
 
+- **2026-11-25** (uncommitted) SL12 and CZ26 deplete to the current SWE before
+  accumulating on snowfall steps (`UpdateSnowCoverFraction`). Replaced
+  `test_SL12_one_curve_per_step` with `test_SL12_deplete_then_accumulate` and
+  `test_CZ26_deplete_then_accumulate`; `test_SL12_n_melt_from_sigma` reference updated
+  to two calls. Unit tests 22/22. Added the fSCA timing section and the timestep
+  dependence issue. Not yet built on Perlmutter.
 - **2026-11-06** (uncommitted) Column-mean snow depth bookkeeping for all non-legacy
   schemes. Layer `dz`, `z`, `zi` rescaled when fSCA changes. Unit tests 16/16.
 - **2026-11-06** Regression on Perlmutter: `2f00a8dd4a` `SL12_legacy` identical to
